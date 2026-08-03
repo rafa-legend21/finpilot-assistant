@@ -1,0 +1,1 @@
+"""FinPilot Assistant backend package."""
