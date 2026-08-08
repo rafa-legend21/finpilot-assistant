@@ -7,11 +7,10 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, model_validator
 
-
 MoneyAmount = Annotated[
     Decimal,
     Field(
-        ge=Decimal("0"),
+        ge=Decimal(0),
         max_digits=12,
         decimal_places=2,
     ),
@@ -151,6 +150,21 @@ class AmountMention(BaseModel):
         "str_strip_whitespace": True,
     }
 
+    @model_validator(mode="after")
+    def validate_user_total_role(self) -> AmountMention:
+        roles_excluded_from_user_total = {
+            AmountRole.INCLUDED_DETAIL,
+            AmountRole.COMMENTARY_PRICE,
+            AmountRole.QUOTED_PRICE,
+            AmountRole.PLANNED_EXPENSE,
+            AmountRole.PAID_BY_OTHER,
+        }
+        if self.counted_in_user_total and self.role in roles_excluded_from_user_total:
+            raise ValueError(
+                f"Amounts with role {self.role.value} cannot count toward user totals."
+            )
+        return self
+
 
 class MoodObservation(BaseModel):
     mood: MoodType
@@ -206,21 +220,19 @@ class SpendingEvent(BaseModel):
         amount unless the event is explicitly awaiting confirmation.
         """
         counted_total = sum(
-            (
-                mention.amount
-                for mention in self.amount_mentions
-                if mention.counted_in_user_total
-            ),
-            start=Decimal("0"),
+            (mention.amount for mention in self.amount_mentions if mention.counted_in_user_total),
+            start=Decimal(0),
         )
 
-        if (
-            not self.needs_confirmation
-            and counted_total != self.user_net_amount
-        ):
+        counted_currencies = {
+            mention.currency for mention in self.amount_mentions if mention.counted_in_user_total
+        }
+        if counted_currencies and counted_currencies != {self.currency}:
+            raise ValueError("Counted amount mentions must use the spending event currency.")
+
+        if not self.needs_confirmation and counted_total != self.user_net_amount:
             raise ValueError(
-                "Counted amount mentions must equal user_net_amount "
-                "for a confirmed spending event."
+                "Counted amount mentions must equal user_net_amount for a confirmed spending event."
             )
 
         return self
@@ -263,9 +275,7 @@ class StoryParseResponse(BaseModel):
     spending_events: list[SpendingEvent] = Field(default_factory=list)
     moods: list[MoodObservation] = Field(default_factory=list)
     life_events: list[LifeEvent] = Field(default_factory=list)
-    confirmation_questions: list[ConfirmationQuestion] = Field(
-        default_factory=list
-    )
+    confirmation_questions: list[ConfirmationQuestion] = Field(default_factory=list)
 
     total_user_expense: MoneyAmount
     total_paid_by_others: MoneyAmount
@@ -275,28 +285,65 @@ class StoryParseResponse(BaseModel):
     draft_only: bool = True
 
     @model_validator(mode="after")
-    def validate_total_user_expense(self) -> StoryParseResponse:
-        calculated_total = sum(
-            (
-                event.user_net_amount
-                for event in self.spending_events
-                if event.transaction_type == TransactionType.EXPENSE
-                and event.payer_type
-                in {PayerType.USER, PayerType.SHARED}
-            ),
-            start=Decimal("0"),
-        )
-
-        confirmed_events = [
+    def validate_financial_totals(self) -> StoryParseResponse:
+        confirmed_user_expenses = [
             event
             for event in self.spending_events
-            if not event.needs_confirmation
+            if event.transaction_type == TransactionType.EXPENSE
+            and event.payer_type in {PayerType.USER, PayerType.SHARED}
+            and not event.needs_confirmation
         ]
-
-        if confirmed_events and calculated_total != self.total_user_expense:
+        confirmed_currencies = {event.currency for event in confirmed_user_expenses}
+        if len(confirmed_currencies) > 1:
             raise ValueError(
-                "total_user_expense must equal the sum of the user's "
-                "confirmed expense events."
+                "Cannot calculate total_user_expense across multiple currencies "
+                "without currency conversion."
             )
 
+        calculated_user_expense = sum(
+            (event.user_net_amount for event in confirmed_user_expenses),
+            start=Decimal(0),
+        )
+        if calculated_user_expense != self.total_user_expense:
+            raise ValueError(
+                "total_user_expense must equal the sum of confirmed user/shared expense events."
+            )
+
+        paid_by_other_mentions = [
+            mention
+            for event in self.spending_events
+            for mention in event.amount_mentions
+            if mention.role == AmountRole.PAID_BY_OTHER
+        ]
+        saved_decision_mentions = [
+            mention
+            for event in self.spending_events
+            for mention in event.amount_mentions
+            if mention.role == AmountRole.SAVED_DECISION
+        ]
+        self.total_paid_by_others = self._sum_single_currency_mentions(
+            paid_by_other_mentions,
+            "total_paid_by_others",
+        )
+        self.total_saved_decisions = self._sum_single_currency_mentions(
+            saved_decision_mentions,
+            "total_saved_decisions",
+        )
+
         return self
+
+    @staticmethod
+    def _sum_single_currency_mentions(
+        mentions: list[AmountMention],
+        total_name: str,
+    ) -> Decimal:
+        currencies = {mention.currency for mention in mentions}
+        if len(currencies) > 1:
+            raise ValueError(
+                f"Cannot calculate {total_name} across multiple currencies "
+                "without currency conversion."
+            )
+        return sum(
+            (mention.amount for mention in mentions),
+            start=Decimal(0),
+        )
