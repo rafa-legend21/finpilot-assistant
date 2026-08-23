@@ -1,4 +1,4 @@
-.PHONY: up down logs test backend-install backend-run
+.PHONY: up down logs test backend-install backend-run db-migrate
 
 up:
 	docker compose up --build
@@ -17,3 +17,6 @@ backend-install:
 
 backend-run:
 	cd backend && uvicorn app.main:app --reload
+
+db-migrate:
+	docker compose run --rm api python scripts/run_migrations.py

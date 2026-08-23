@@ -19,12 +19,16 @@ services:
   api:
     build:
       context: ./backend
+
+    env_file:
+      - .env
+
     environment:
       APP_ENV: development
       APP_NAME: FinPilot Assistant API
       API_V1_PREFIX: /api/v1
       DATABASE_URL: postgresql+psycopg://finpilot:finpilot@db:5432/finpilot
-      CORS_ORIGINS: '["http://localhost:3000","http://localhost:8080"]'
+      CORS_ORIGINS: '["http://localhost:3000","http://localhost:8080","http://localhost:62888"]'
       SECRET_KEY: local-development-only
     ports:
       - "8000:8000"
@@ -33,9 +37,8 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
+      - ./database/migrations:/app/migrations:ro
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 volumes:
   finpilot_postgres:
-
-

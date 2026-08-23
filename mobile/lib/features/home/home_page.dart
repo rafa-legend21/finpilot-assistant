@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../core/api_client.dart';
+import '../financial_review/journal_entry_page.dart';
+
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
@@ -43,6 +46,13 @@ class HomePage extends StatelessWidget {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: 0,
+        onDestinationSelected: (index) {
+          if (index == 3) {
+            Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => JournalEntryPage(api: HttpFinPilotApi()),
+            ));
+          }
+        },
         destinations: const [
           NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
           NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: 'Transactions'),

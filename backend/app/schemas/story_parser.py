@@ -65,6 +65,14 @@ class PayerType(StrEnum):
     UNKNOWN = "unknown"
 
 
+class SettlementStatus(StrEnum):
+    COVERED_BY_OTHER = "covered_by_other"
+    REPAID_BY_USER = "repaid_by_user"
+    REPAYMENT_DUE = "repayment_due"
+    UNRESOLVED = "unresolved"
+    NOT_APPLICABLE = "not_applicable"
+
+
 class AmountRole(StrEnum):
     # The amount actually counted toward the user's finances.
     USER_NET_EXPENSE = "user_net_expense"
@@ -200,6 +208,7 @@ class SpendingEvent(BaseModel):
     merchant: str | None = Field(default=None, max_length=150)
     payer_type: PayerType = PayerType.UNKNOWN
     paid_by_name: str | None = Field(default=None, max_length=100)
+    settlement_status: SettlementStatus = SettlementStatus.NOT_APPLICABLE
 
     user_net_amount: MoneyAmount
     currency: CurrencyCode = CurrencyCode.CAD
@@ -230,10 +239,31 @@ class SpendingEvent(BaseModel):
         if counted_currencies and counted_currencies != {self.currency}:
             raise ValueError("Counted amount mentions must use the spending event currency.")
 
-        if not self.needs_confirmation and counted_total != self.user_net_amount:
+        if (
+            not self.needs_confirmation
+            and self.settlement_status != SettlementStatus.REPAYMENT_DUE
+            and counted_total != self.user_net_amount
+        ):
             raise ValueError(
                 "Counted amount mentions must equal user_net_amount for a confirmed spending event."
             )
+
+        if self.settlement_status == SettlementStatus.UNRESOLVED and not self.needs_confirmation:
+            raise ValueError("Unresolved settlement responsibility requires confirmation.")
+        if (
+            self.settlement_status == SettlementStatus.COVERED_BY_OTHER
+            and (self.user_net_amount != 0 or counted_total != 0)
+        ):
+            raise ValueError("An expense covered by another person cannot count toward the user.")
+        if self.settlement_status == SettlementStatus.REPAYMENT_DUE and counted_total != 0:
+            raise ValueError("A repayment that is still due cannot count as completed cash outflow.")
+        if self.payer_type != PayerType.OTHER_PERSON and self.settlement_status in {
+            SettlementStatus.COVERED_BY_OTHER,
+            SettlementStatus.REPAID_BY_USER,
+            SettlementStatus.REPAYMENT_DUE,
+            SettlementStatus.UNRESOLVED,
+        }:
+            raise ValueError("Third-party settlement states require another person as initial payer.")
 
         return self
 
@@ -290,7 +320,10 @@ class StoryParseResponse(BaseModel):
             event
             for event in self.spending_events
             if event.transaction_type == TransactionType.EXPENSE
-            and event.payer_type in {PayerType.USER, PayerType.SHARED}
+            and (
+                event.payer_type in {PayerType.USER, PayerType.SHARED}
+                or event.settlement_status == SettlementStatus.REPAID_BY_USER
+            )
             and not event.needs_confirmation
         ]
         confirmed_currencies = {event.currency for event in confirmed_user_expenses}
