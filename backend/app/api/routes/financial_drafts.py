@@ -25,7 +25,11 @@ from app.services.financial_draft_service import (
     FinancialDraftService,
     FinancialDraftValidationError,
 )
-from app.services.story_parser_service import StoryParserService
+from app.services.story_parser_service import (
+    StoryParserConfigurationError,
+    StoryParserOutputError,
+    StoryParserService,
+)
 
 router = APIRouter(prefix="/financial-drafts", tags=["financial-drafts"])
 
@@ -47,13 +51,24 @@ def create_draft_from_journal(
     request: JournalDraftCreateRequest,
     session: SessionDependency,
 ) -> ClarifyingFinancialDraftResponse:
-    parsed = StoryParserService().parse(
-        StoryParseRequest(
-            text=request.text,
-            default_currency=request.default_currency,
-            reference_date=request.reference_date,
+    try:
+        parsed = StoryParserService().parse(
+            StoryParseRequest(
+                text=request.text,
+                default_currency=request.default_currency,
+                reference_date=request.reference_date,
+            )
         )
-    )
+    except StoryParserConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Story parsing is temporarily unavailable. Please try again.",
+        ) from exc
+    except StoryParserOutputError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="FinPilot could not process the journal right now. Please try again.",
+        ) from exc
     return ClarificationService(session).create_from_parse(request.text, parsed)
 
 

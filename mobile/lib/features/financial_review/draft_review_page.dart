@@ -6,7 +6,8 @@ import 'models/financial_review_models.dart';
 import 'widgets/draft_event_card.dart';
 
 class DraftReviewPage extends StatefulWidget {
-  const DraftReviewPage({required this.api, required this.initialDraft, super.key});
+  const DraftReviewPage(
+      {required this.api, required this.initialDraft, super.key});
   final FinPilotApi api;
   final FinancialDraft initialDraft;
 
@@ -26,18 +27,37 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
     _draft = widget.initialDraft;
   }
 
-  int get _pendingCount =>
-      _draft.events.where((event) => event.disposition == DraftEventDisposition.pending).length;
+  int get _pendingCount => _draft.events
+      .where((event) => event.disposition == DraftEventDisposition.pending)
+      .length;
 
-  bool get _canConfirm => _draft.status == DraftStatus.draft &&
+  int get _missingIncludedDateCount => _draft.events
+      .where((event) =>
+          event.disposition == DraftEventDisposition.include &&
+          (event.event.eventDate == null ||
+              event.event.eventDate!.trim().isEmpty))
+      .length;
+
+  bool get _nothingWillBeRecorded =>
+      _draft.events.isNotEmpty &&
+      _draft.totalsByCurrency.isEmpty &&
+      _draft.events.every(
+        (event) => event.disposition == DraftEventDisposition.exclude,
+      );
+
+  bool get _canConfirm =>
+      _draft.status == DraftStatus.draft &&
       _draft.events.isNotEmpty &&
       _pendingCount == 0 &&
+      _missingIncludedDateCount == 0 &&
       !_confirming;
 
   Future<void> _edit(FinancialDraftEvent event) async {
     if (_confirming || _draft.status != DraftStatus.draft) return;
-    final updated = await Navigator.of(context).push<FinancialDraft>(MaterialPageRoute(
-      builder: (_) => EventEditPage(api: widget.api, draft: _draft, draftEvent: event),
+    final updated =
+        await Navigator.of(context).push<FinancialDraft>(MaterialPageRoute(
+      builder: (_) =>
+          EventEditPage(api: widget.api, draft: _draft, draftEvent: event),
     ));
     if (updated != null && mounted) setState(() => _draft = updated);
   }
@@ -78,7 +98,8 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
     if (_confirming || _draft.status != DraftStatus.draft) return;
     setState(() => _confirming = true);
     try {
-      await widget.api.cancelDraft(draftId: _draft.id, expectedVersion: _draft.version);
+      await widget.api
+          .cancelDraft(draftId: _draft.id, expectedVersion: _draft.version);
       if (mounted) Navigator.of(context).pop();
     } on ApiException catch (error) {
       if (error.statusCode == 409) {
@@ -103,7 +124,9 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
         title: const Text('Review your draft'),
         actions: [
           TextButton(
-            onPressed: _confirming || _draft.status != DraftStatus.draft ? null : _cancel,
+            onPressed: _confirming || _draft.status != DraftStatus.draft
+                ? null
+                : _cancel,
             child: const Text('Cancel draft'),
           ),
         ],
@@ -114,20 +137,29 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
           Text(_draft.summary, style: const TextStyle(fontSize: 16)),
           const SizedBox(height: 18),
           if (_draft.totalsByCurrency.isNotEmpty) ...[
-            const Text('Included totals', style: TextStyle(fontWeight: FontWeight.w700)),
+            const Text('Included totals',
+                style: TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               children: _draft.totalsByCurrency.entries
-                  .map((entry) => Chip(label: Text('${entry.key} ${entry.value}')))
+                  .map((entry) =>
+                      Chip(label: Text('${entry.key} ${entry.value}')))
                   .toList(),
+            ),
+          ] else if (_nothingWillBeRecorded) ...[
+            const Text(
+              'Nothing will be recorded',
+              key: Key('nothingRecordedMessage'),
+              style: TextStyle(fontWeight: FontWeight.w700),
             ),
           ],
           if (_draft.confirmationQuestions.isNotEmpty) ...[
             const SizedBox(height: 16),
             ..._draft.confirmationQuestions.map((question) => ListTile(
                   leading: const Icon(Icons.help_outline, color: Colors.amber),
-                  title: Text(question['question'] as String? ?? 'Please review this event.'),
+                  title: Text(question['question'] as String? ??
+                      'Please review this event.'),
                   subtitle: Text(question['reason'] as String? ?? ''),
                 )),
           ],
@@ -136,7 +168,8 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
             const Card(
               child: Padding(
                 padding: EdgeInsets.all(20),
-                child: Text('No financial events found. Go back and edit your journal entry.'),
+                child: Text(
+                    'No financial events found. Go back and edit your journal entry.'),
               ),
             )
           else
@@ -148,7 +181,8 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: Text(_error!, key: const Key('draftError'),
+              child: Text(_error!,
+                  key: const Key('draftError'),
                   style: TextStyle(color: Colors.red.shade700)),
             ),
         ],
@@ -160,7 +194,14 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (_pendingCount > 0)
-                Text('$_pendingCount event${_pendingCount == 1 ? '' : 's'} still need review'),
+                Text(
+                    '$_pendingCount event${_pendingCount == 1 ? '' : 's'} still need review'),
+              if (_missingIncludedDateCount > 0)
+                const Text(
+                  'Review events marked Date required and add an exact transaction date.',
+                  key: Key('missingDateGuidance'),
+                  textAlign: TextAlign.center,
+                ),
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
@@ -169,7 +210,8 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
                   onPressed: _canConfirm ? _confirm : null,
                   icon: _confirming
                       ? const SizedBox.square(
-                          dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.check_circle_outline),
                   label: Text(_confirming ? 'Confirming…' : 'Confirm draft'),
                 ),
@@ -189,12 +231,15 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.check_circle, size: 64, color: Colors.green.shade700),
+                Icon(Icons.check_circle,
+                    size: 64, color: Colors.green.shade700),
                 const SizedBox(height: 16),
                 const Text('Draft confirmed',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+                    style:
+                        TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
-                Text('${_confirmation!.transactionIds.length} transaction(s) saved'),
+                Text(
+                    '${_confirmation!.transactionIds.length} transaction(s) saved'),
                 const SizedBox(height: 20),
                 FilledButton(
                   onPressed: () => Navigator.of(context).pop(),

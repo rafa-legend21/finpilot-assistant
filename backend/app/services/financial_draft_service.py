@@ -180,7 +180,7 @@ class FinancialDraftService:
                 event = self._validated_event(draft_event)
                 self._validate_included_event(event)
                 transaction = Transaction(
-                    merchant=event.merchant or "",
+                    merchant=event.merchant,
                     amount=event.user_net_amount,
                     currency=event.currency.value,
                     category=event.category.value,
@@ -257,6 +257,10 @@ class FinancialDraftService:
             raise FinancialDraftConflictError(
                 "Only user, shared, or completed repayment expenses may be included."
             )
+        if disposition == DraftEventDisposition.INCLUDE and event.event_date is None:
+            raise FinancialDraftConflictError(
+                "Included events require an exact transaction date."
+            )
 
     @staticmethod
     def _validate_included_event(event: SpendingEvent) -> None:
@@ -275,9 +279,9 @@ class FinancialDraftService:
             raise FinancialDraftConflictError(
                 "Only user or shared expenses may be included in this ledger version."
             )
-        if not event.merchant or event.event_date is None:
+        if event.event_date is None:
             raise FinancialDraftConflictError(
-                "Included events require a merchant and transaction date."
+                "Included events require an exact transaction date."
             )
         if event.user_net_amount <= 0:
             raise FinancialDraftConflictError("Included expenses must have a positive amount.")
@@ -299,6 +303,7 @@ class FinancialDraftService:
             if (
                 disposition == DraftEventDisposition.INCLUDE
                 and not event.needs_confirmation
+                and event.event_date is not None
                 and event.transaction_type == TransactionType.EXPENSE
                 and (
                     event.payer_type in {PayerType.USER, PayerType.SHARED}

@@ -65,12 +65,19 @@ class _EventEditPageState extends State<EventEditPage> {
         disposition == DraftEventDisposition.include) {
       disposition = DraftEventDisposition.exclude;
     }
+    final eventDate = _date.text.trim();
+    if (disposition == DraftEventDisposition.include &&
+        !_isValidExactDate(eventDate)) {
+      setState(() => _error =
+          'Enter a valid date in YYYY-MM-DD format to include this event.');
+      return;
+    }
     final edited = widget.draftEvent.event.edited(
       amount: amount,
       category: _category,
       payerType: _payer,
       merchant: _merchant.text.trim().isEmpty ? null : _merchant.text.trim(),
-      eventDate: _date.text.trim().isEmpty ? null : _date.text.trim(),
+      eventDate: eventDate.isEmpty ? null : eventDate,
     );
     setState(() {
       _saving = true;
@@ -102,6 +109,17 @@ class _EventEditPageState extends State<EventEditPage> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  bool _isValidExactDate(String value) {
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
+    if (match == null) return false;
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    if (year == 0) return false;
+    final parsed = DateTime.utc(year, month, day);
+    return parsed.year == year && parsed.month == month && parsed.day == day;
   }
 
   @override
@@ -155,11 +173,16 @@ class _EventEditPageState extends State<EventEditPage> {
           ),
           const SizedBox(height: 12),
           TextField(
+            key: const Key('merchantField'),
             controller: _merchant,
-            decoration: const InputDecoration(labelText: 'Merchant'),
+            decoration: const InputDecoration(
+              labelText: 'Merchant (optional)',
+              helperText: 'Leave blank if unknown',
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
+            key: const Key('dateField'),
             controller: _date,
             decoration: const InputDecoration(labelText: 'Date (YYYY-MM-DD)'),
           ),

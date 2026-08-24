@@ -1,4 +1,6 @@
+from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -13,8 +15,10 @@ from app.schemas.story_parser import (
     PayerType,
     QuantityMention,
     SpendingEvent,
+    StoryParseRequest,
     StoryParseResponse,
 )
+from app.services.story_parser_service import StoryParserService
 
 
 def amount(
@@ -43,11 +47,13 @@ def event(
     mentions: list[AmountMention] | None = None,
     quantities: list[QuantityMention] | None = None,
     currency: CurrencyCode = CurrencyCode.CAD,
+    merchant: str | None = None,
 ) -> SpendingEvent:
     return SpendingEvent(
         title="Test event",
         category=ExpenseCategory.DINING,
         payer_type=payer,
+        merchant=merchant,
         user_net_amount=Decimal(value),
         currency=currency,
         amount_mentions=mentions
@@ -171,3 +177,45 @@ def test_tired_and_happy_moods_can_coexist() -> None:
         MoodType.TIRED,
         MoodType.HAPPY,
     }
+
+
+@pytest.mark.parametrize("merchant", [None, "", "   ", "\t\r\n"])
+def test_blank_merchant_normalizes_to_none(merchant: str | None) -> None:
+    parsed_event = event("10", merchant=merchant)
+
+    assert parsed_event.merchant is None
+
+
+def test_non_empty_merchant_is_preserved_without_display_substitution() -> None:
+    parsed_event = event("10", merchant="Corner Cafe")
+
+    assert parsed_event.merchant == "Corner Cafe"
+
+
+def test_reference_date_is_parser_context_not_an_event_date_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = StoryParseRequest(
+        text="I bought coffee beans.",
+        reference_date=date(2026, 8, 23),
+    )
+    parsed_response = response([event("18")], "18")
+    captured_input: list[str] = []
+
+    class FakeResponses:
+        def parse(self, **kwargs):
+            captured_input.append(kwargs["input"])
+            return SimpleNamespace(output_parsed=parsed_response)
+
+    monkeypatch.setattr(
+        "app.services.story_parser_service.get_settings",
+        lambda: SimpleNamespace(openai_api_key="test-key", openai_model="test-model"),
+    )
+    parser = StoryParserService(
+        client=SimpleNamespace(responses=FakeResponses()),  # type: ignore[arg-type]
+    )
+
+    result = parser.parse(request)
+
+    assert "Reference date: 2026-08-23" in captured_input[0]
+    assert result.spending_events[0].event_date is None

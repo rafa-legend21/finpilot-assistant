@@ -5,7 +5,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 MoneyAmount = Annotated[
     Decimal,
@@ -219,6 +219,13 @@ class SpendingEvent(BaseModel):
     source_text: str = Field(min_length=1)
     confidence: Confidence
     needs_confirmation: bool = False
+
+    @field_validator("merchant", mode="before")
+    @classmethod
+    def normalize_unknown_merchant(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @model_validator(mode="after")
     def validate_counted_amounts(self) -> SpendingEvent:

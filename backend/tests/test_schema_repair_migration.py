@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shutil
@@ -19,6 +20,12 @@ from scripts.run_migrations import (
 )
 
 MIGRATION_DIRECTORY = default_migration_directory()
+EXPECTED_MIGRATION_CHECKSUMS = {
+    1: "5fd14801f256494bf39a4e5e586e155d00cadbcb7eb67abb6550af3a2c5e956a",
+    2: "41a090fdc08e1c6673fa381865f84c3498789c8d4370dcd2cc9a6c46a54ea756",
+    3: "98a9474f41fd98879ddd9aa3f9a5cb7e01b6732ef65d8093900f7c3f7c330058",
+    4: "b99fa0efda24f354ecc16d5848e4fb65fb0a8eea4e4a2ba7cbf7a72684205a22",
+}
 EXPECTED_ROUND_EXPRESSION = "((round_number >= 1) AND (round_number <= 3))"
 TEST_SCHEMA_PATTERN = re.compile(r"^test_schema_repair_[0-9a-f]{32}$")
 CREATE_EXTENSION_PATTERN = re.compile(
@@ -32,8 +39,6 @@ UNSUPPORTED_DATABASE_GLOBAL_PATTERN = re.compile(
     r"|\b(?:ALTER|DROP)\s+EXTENSION\b",
     re.IGNORECASE,
 )
-BASE_MIGRATION_VERSIONS = frozenset({1, 2})
-
 DRAFT_ID = "10000000-0000-0000-0000-000000000001"
 EVENT_ID = "20000000-0000-0000-0000-000000000001"
 CLARIFICATION_ID_1 = "30000000-0000-0000-0000-000000000001"
@@ -92,12 +97,10 @@ def _public_evidence(engine: Engine) -> tuple[object, ...]:
     return migrations, clarification_count, transaction_count, extensions
 
 
-def _base_migration_global_requirements() -> tuple[frozenset[str], tuple[str, ...]]:
+def _migration_global_requirements() -> tuple[frozenset[str], tuple[str, ...]]:
     required_extensions: set[str] = set()
     unsupported_operations: list[str] = []
     for migration in discover_migrations(MIGRATION_DIRECTORY):
-        if migration.version not in BASE_MIGRATION_VERSIONS:
-            continue
         for match in CREATE_EXTENSION_PATTERN.finditer(migration.sql):
             required_extensions.add(match.group(1) or match.group(2))
         unsupported_operations.extend(
@@ -163,10 +166,10 @@ def isolated_postgres() -> Iterator[IsolatedPostgres]:
         except OperationalError as exc:
             pytest.skip(f"PostgreSQL TEST_DATABASE_URL is unavailable: {exc}")
 
-        required_extensions, unsupported_operations = _base_migration_global_requirements()
+        required_extensions, unsupported_operations = _migration_global_requirements()
         if unsupported_operations:
             pytest.fail(
-                "Base migrations contain unsupported database-global operation(s): "
+                "Migrations contain unsupported database-global operation(s): "
                 + ", ".join(unsupported_operations)
             )
         _assert_required_extensions_exist(admin_engine, required_extensions)
@@ -219,11 +222,35 @@ def isolated_postgres() -> Iterator[IsolatedPostgres]:
         admin_engine.dispose()
 
 
-def test_base_migrations_have_no_database_global_operations() -> None:
-    required_extensions, unsupported_operations = _base_migration_global_requirements()
+def test_migrations_have_no_database_global_operations() -> None:
+    required_extensions, unsupported_operations = _migration_global_requirements()
 
     assert required_extensions == frozenset()
     assert unsupported_operations == ()
+
+
+def test_migration_files_are_lf_only_with_expected_checksums() -> None:
+    migrations = discover_migrations(MIGRATION_DIRECTORY)
+
+    assert {migration.version for migration in migrations} == set(
+        EXPECTED_MIGRATION_CHECKSUMS
+    )
+
+    for migration in migrations:
+        raw = (MIGRATION_DIRECTORY / migration.filename).read_bytes()
+        crlf_count = raw.count(b"\r\n")
+        lone_cr_count = raw.replace(b"\r\n", b"").count(b"\r")
+
+        assert crlf_count == 0, (
+            f"{migration.filename} contains {crlf_count} CRLF line ending(s)"
+        )
+        assert lone_cr_count == 0, (
+            f"{migration.filename} contains {lone_cr_count} lone CR byte(s)"
+        )
+        assert raw.endswith(b"\n"), f"{migration.filename} must end with one LF newline"
+        assert migration.sql.encode("utf-8") == raw
+        assert migration.checksum == hashlib.sha256(raw).hexdigest()
+        assert migration.checksum == EXPECTED_MIGRATION_CHECKSUMS[migration.version]
 
 
 def _copy_migrations(directory: Path, versions: tuple[int, ...]) -> Path:
@@ -390,6 +417,100 @@ def _column_details(engine: Engine, table: str, column: str) -> tuple[str, str |
     return row.data_type, row.column_default
 
 
+def _transaction_column_definitions(engine: Engine) -> dict[str, tuple[object, ...]]:
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                """
+                SELECT
+                    column_name,
+                    data_type,
+                    character_maximum_length,
+                    is_nullable,
+                    column_default
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'transactions'
+                ORDER BY ordinal_position
+                """
+            )
+        ).mappings()
+        return {
+            row["column_name"]: (
+                row["data_type"],
+                row["character_maximum_length"],
+                row["is_nullable"],
+                row["column_default"],
+            )
+            for row in rows
+        }
+
+
+def _transaction_constraint_definitions(engine: Engine) -> tuple[tuple[object, ...], ...]:
+    with engine.connect() as connection:
+        return tuple(
+            connection.execute(
+                text(
+                    """
+                    SELECT
+                        constraint_row.conname,
+                        constraint_row.contype,
+                        constraint_row.convalidated,
+                        pg_get_constraintdef(constraint_row.oid)
+                    FROM pg_constraint AS constraint_row
+                    WHERE constraint_row.conrelid = 'transactions'::REGCLASS
+                    ORDER BY constraint_row.conname
+                    """
+                )
+            ).all()
+        )
+
+
+def _transaction_index_definitions(engine: Engine) -> tuple[tuple[str, str], ...]:
+    with engine.connect() as connection:
+        return tuple(
+            connection.execute(
+                text(
+                    """
+                    SELECT index_relation.relname, pg_get_indexdef(index_relation.oid)
+                    FROM pg_index AS index_row
+                    JOIN pg_class AS index_relation
+                      ON index_relation.oid = index_row.indexrelid
+                    WHERE index_row.indrelid = 'transactions'::REGCLASS
+                    ORDER BY index_relation.relname
+                    """
+                )
+            ).tuples()
+        )
+
+
+def _table_digest(engine: Engine, table: str) -> str:
+    if table not in {"financial_draft_clarifications", "transactions"}:
+        raise ValueError(f"Unsupported digest table: {table}")
+    with engine.connect() as connection:
+        digest = connection.scalar(
+            text(
+                f"""
+                SELECT md5(
+                    COALESCE(
+                        jsonb_agg(to_jsonb(snapshot) ORDER BY snapshot.id)::TEXT,
+                        '[]'
+                    )
+                )
+                FROM (SELECT * FROM {table}) AS snapshot
+                """
+            )
+        )
+    assert digest is not None
+    return digest
+
+
+def _assert_nullable_merchant_policy(engine: Engine) -> None:
+    columns = _transaction_column_definitions(engine)
+    assert columns["merchant"] == ("character varying", 150, "YES", None)
+    assert columns["transaction_date"] == ("date", None, "NO", None)
+
+
 def _constraint_details(engine: Engine) -> dict[str, dict[str, object]]:
     with engine.connect() as connection:
         rows = connection.execute(
@@ -482,7 +603,10 @@ def test_repairs_drifted_schema_and_preserves_rows(
         ).all()
 
     runner = MigrationRunner(engine, MIGRATION_DIRECTORY, use_advisory_lock=False)
-    assert runner.run() == ["003_repair_schema_drift.sql"]
+    assert runner.run() == [
+        "003_repair_schema_drift.sql",
+        "004_allow_unknown_transaction_merchant.sql",
+    ]
     assert runner.run() == []
 
     with engine.connect() as connection:
@@ -506,6 +630,7 @@ def test_repairs_drifted_schema_and_preserves_rows(
     assert _column_details(engine, "financial_draft_clarifications", "options_payload")[0] == "jsonb"
     assert _column_details(engine, "financial_draft_clarifications", "answer_payload")[0] == "jsonb"
     _assert_repaired_constraints(engine)
+    _assert_nullable_merchant_policy(engine)
 
     migration = discover_migrations(MIGRATION_DIRECTORY)[2]
     with engine.connect() as connection:
@@ -517,7 +642,7 @@ def test_repairs_drifted_schema_and_preserves_rows(
     assert recorded == (3, migration.filename, migration.checksum)
 
 
-def test_already_correct_schema_remains_correct(
+def test_fresh_schema_applies_all_migrations_and_remains_correct(
     isolated_postgres: IsolatedPostgres,
 ) -> None:
     runner = MigrationRunner(
@@ -529,9 +654,125 @@ def test_already_correct_schema_remains_correct(
         "001_financial_drafts.sql",
         "002_draft_clarifications.sql",
         "003_repair_schema_drift.sql",
+        "004_allow_unknown_transaction_merchant.sql",
     ]
     assert runner.run() == []
     _assert_repaired_constraints(isolated_postgres.engine)
+    _assert_nullable_merchant_policy(isolated_postgres.engine)
+
+
+def test_nullable_merchant_migration_upgrades_003_schema_without_data_loss(
+    isolated_postgres: IsolatedPostgres,
+    tmp_path: Path,
+) -> None:
+    engine = isolated_postgres.engine
+    through_003 = _copy_migrations(tmp_path / "through_003", (1, 2, 3))
+    assert MigrationRunner(engine, through_003, use_advisory_lock=False).run() == [
+        "001_financial_drafts.sql",
+        "002_draft_clarifications.sql",
+        "003_repair_schema_drift.sql",
+    ]
+    _insert_base_data(engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            """
+            CREATE INDEX ix_transactions_id ON transactions (id);
+            CREATE INDEX ix_transactions_merchant ON transactions (merchant);
+            CREATE INDEX ix_transactions_category ON transactions (category);
+            CREATE INDEX ix_transactions_transaction_date
+                ON transactions (transaction_date);
+            """
+        )
+
+    with engine.connect() as connection:
+        before_clarifications = connection.execute(
+            text("SELECT * FROM financial_draft_clarifications ORDER BY id")
+        ).mappings().all()
+        before_transactions = connection.execute(
+            text("SELECT * FROM transactions ORDER BY id")
+        ).mappings().all()
+    before_digests = {
+        "clarifications": _table_digest(engine, "financial_draft_clarifications"),
+        "transactions": _table_digest(engine, "transactions"),
+    }
+    before_columns = _transaction_column_definitions(engine)
+    before_constraints = _transaction_constraint_definitions(engine)
+    before_indexes = _transaction_index_definitions(engine)
+    assert before_columns["merchant"] == ("character varying", 150, "NO", None)
+    assert {
+        "ix_transactions_id",
+        "ix_transactions_merchant",
+        "ix_transactions_category",
+        "ix_transactions_transaction_date",
+    }.issubset({name for name, _ in before_indexes})
+
+    runner = MigrationRunner(engine, MIGRATION_DIRECTORY, use_advisory_lock=False)
+    assert runner.run() == ["004_allow_unknown_transaction_merchant.sql"]
+    assert runner.run() == []
+
+    with engine.connect() as connection:
+        after_clarifications = connection.execute(
+            text("SELECT * FROM financial_draft_clarifications ORDER BY id")
+        ).mappings().all()
+        after_transactions = connection.execute(
+            text("SELECT * FROM transactions ORDER BY id")
+        ).mappings().all()
+    assert after_clarifications == before_clarifications
+    assert after_transactions == before_transactions
+    assert {
+        "clarifications": _table_digest(engine, "financial_draft_clarifications"),
+        "transactions": _table_digest(engine, "transactions"),
+    } == before_digests
+
+    expected_columns = dict(before_columns)
+    merchant_definition = list(expected_columns["merchant"])
+    merchant_definition[2] = "YES"
+    expected_columns["merchant"] = tuple(merchant_definition)
+    assert _transaction_column_definitions(engine) == expected_columns
+    assert _transaction_constraint_definitions(engine) == before_constraints
+    assert _transaction_index_definitions(engine) == before_indexes
+    _assert_nullable_merchant_policy(engine)
+
+    migration = next(
+        item for item in discover_migrations(MIGRATION_DIRECTORY) if item.version == 4
+    )
+    with engine.connect() as connection:
+        recorded = connection.execute(
+            text(
+                "SELECT version, filename, checksum "
+                "FROM schema_migrations WHERE version = 4"
+            )
+        ).one()
+    assert recorded == (4, migration.filename, migration.checksum)
+
+
+def test_nullable_merchant_is_allowed_but_transaction_date_remains_required(
+    isolated_postgres: IsolatedPostgres,
+) -> None:
+    engine = isolated_postgres.engine
+    MigrationRunner(engine, MIGRATION_DIRECTORY, use_advisory_lock=False).run()
+
+    with engine.begin() as connection:
+        inserted = connection.execute(
+            text(
+                """
+                INSERT INTO transactions (amount, transaction_date)
+                VALUES (4.50, DATE '2026-08-24')
+                RETURNING merchant, transaction_date
+                """
+            )
+        ).one()
+    assert inserted.merchant is None
+    assert inserted.transaction_date.isoformat() == "2026-08-24"
+
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO transactions (merchant, amount) VALUES (NULL, 5.00)")
+        )
+
+    with engine.connect() as connection:
+        assert connection.scalar(text("SELECT COUNT(*) FROM transactions")) == 1
+    _assert_nullable_merchant_policy(engine)
 
 
 def test_restored_defaults_and_constraints_are_enforced(

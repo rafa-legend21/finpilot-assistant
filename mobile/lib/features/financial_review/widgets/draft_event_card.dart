@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/financial_review_models.dart';
 
 class DraftEventCard extends StatelessWidget {
-  const DraftEventCard({required this.draftEvent, required this.onEdit, super.key});
+  const DraftEventCard(
+      {required this.draftEvent, required this.onEdit, super.key});
 
   final FinancialDraftEvent draftEvent;
   final VoidCallback onEdit;
@@ -12,9 +13,16 @@ class DraftEventCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final event = draftEvent.event;
     final excluded = draftEvent.disposition == DraftEventDisposition.exclude;
-    final unresolved = draftEvent.disposition == DraftEventDisposition.pending ||
-        event.needsConfirmation;
-    final paidByOther = event.payerType != 'user' && event.payerType != 'shared';
+    final missingIncludedDate =
+        draftEvent.disposition == DraftEventDisposition.include &&
+            (event.eventDate == null || event.eventDate!.trim().isEmpty);
+    final unresolved =
+        draftEvent.disposition == DraftEventDisposition.pending ||
+            event.needsConfirmation ||
+            missingIncludedDate;
+    final paidByOther =
+        event.payerType != 'user' && event.payerType != 'shared';
+    final savedDate = event.eventDate?.trim();
     final color = excluded
         ? Colors.grey
         : unresolved
@@ -24,15 +32,17 @@ class DraftEventCard extends StatelessWidget {
                 : Theme.of(context).colorScheme.primary;
     final label = excluded
         ? "Won't be recorded"
-        : unresolved
-            ? event.needsConfirmation
-                ? 'Needs confirmation'
-                : 'Review needed'
-            : draftEvent.disposition == DraftEventDisposition.include
-                ? 'Will be recorded'
-                : paidByOther
-                    ? 'Paid by others'
-                    : 'You paid';
+        : missingIncludedDate
+            ? 'Date required'
+            : unresolved
+                ? event.needsConfirmation
+                    ? 'Needs confirmation'
+                    : 'Review needed'
+                : draftEvent.disposition == DraftEventDisposition.include
+                    ? 'Will be recorded'
+                    : paidByOther
+                        ? 'Paid by others'
+                        : 'You paid';
     final icon = excluded
         ? Icons.remove_circle_outline
         : unresolved
@@ -61,10 +71,29 @@ class DraftEventCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(event.title,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 16)),
                   ),
-                  Text('${event.currency} ${event.userNetAmount}',
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Flexible(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Event amount',
+                          key: const Key('eventAmountLabel'),
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                        Text(
+                          '${event.currency} ${event.userNetAmount}',
+                          key: const Key('eventAmountValue'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -77,7 +106,20 @@ class DraftEventCard extends StatelessWidget {
                     label: Text(label),
                     visualDensity: VisualDensity.compact,
                   ),
-                  Chip(label: Text(event.category), visualDensity: VisualDensity.compact),
+                  Chip(
+                      label: Text(event.category),
+                      visualDensity: VisualDensity.compact),
+                  Chip(
+                    label: Text(_merchantLabel(event)),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  if (savedDate != null && savedDate.isNotEmpty)
+                    Chip(
+                      avatar:
+                          const Icon(Icons.calendar_today_outlined, size: 16),
+                      label: Text('Date: $savedDate'),
+                      visualDensity: VisualDensity.compact,
+                    ),
                   Chip(
                     label: Text(_payerLabel(event)),
                     visualDensity: VisualDensity.compact,
@@ -98,10 +140,19 @@ class DraftEventCard extends StatelessWidget {
     );
   }
 
+  String _merchantLabel(SpendingEvent event) {
+    final merchant = event.merchant;
+    return merchant == null || merchant.trim().isEmpty
+        ? 'Unknown merchant'
+        : merchant;
+  }
+
   String _payerLabel(SpendingEvent event) => switch (event.payerType) {
         'user' => 'You paid',
         'shared' => 'Shared',
-        'other_person' => event.paidByName == null ? 'Paid by someone else' : 'Paid by ${event.paidByName}',
+        'other_person' => event.paidByName == null
+            ? 'Paid by someone else'
+            : 'Paid by ${event.paidByName}',
         'employer' => 'Employer paid',
         _ => 'Payer unknown',
       };
