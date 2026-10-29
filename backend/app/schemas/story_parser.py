@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, WithJsonSchema, field_validator, model_validator
 
 MoneyAmount = Annotated[
     Decimal,
@@ -13,6 +13,24 @@ MoneyAmount = Annotated[
         ge=Decimal(0),
         max_digits=12,
         decimal_places=2,
+    ),
+    WithJsonSchema(
+        {
+            "type": "number",
+            "minimum": 0,
+            "multipleOf": 0.01,
+        }
+    ),
+]
+
+PositiveQuantity = Annotated[
+    Decimal,
+    Field(gt=0),
+    WithJsonSchema(
+        {
+            "type": "number",
+            "exclusiveMinimum": 0,
+        }
     ),
 ]
 
@@ -133,7 +151,7 @@ class LifeEventType(StrEnum):
 class QuantityMention(BaseModel):
     """A non-financial quantity, such as 6 ounces or 2 apples."""
 
-    value: Decimal = Field(gt=0)
+    value: PositiveQuantity
     unit: str = Field(min_length=1, max_length=40)
     item: str | None = Field(default=None, max_length=150)
     source_text: str = Field(min_length=1)
@@ -235,6 +253,15 @@ class SpendingEvent(BaseModel):
         The counted amount mentions may not exceed the user's final net
         amount unless the event is explicitly awaiting confirmation.
         """
+        if self.settlement_status == SettlementStatus.COVERED_BY_OTHER:
+            self.amount_mentions = [
+                mention.model_copy(update={"role": AmountRole.PAID_BY_OTHER})
+                if mention.role == AmountRole.EVENT_TOTAL
+                and not mention.counted_in_user_total
+                else mention
+                for mention in self.amount_mentions
+            ]
+
         counted_total = sum(
             (mention.amount for mention in self.amount_mentions if mention.counted_in_user_total),
             start=Decimal(0),
@@ -290,6 +317,7 @@ class StoryParseRequest(BaseModel):
     )
     default_currency: CurrencyCode = CurrencyCode.CAD
     reference_date: date | None = None
+    response_language: Literal["zh", "en", "fr"] | None = None
 
     model_config = {
         "str_strip_whitespace": True,

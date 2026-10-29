@@ -14,6 +14,7 @@ from app.schemas.story_parser import (
     MoodType,
     PayerType,
     QuantityMention,
+    SettlementStatus,
     SpendingEvent,
     StoryParseRequest,
     StoryParseResponse,
@@ -43,6 +44,7 @@ def event(
     value: str,
     *,
     payer: PayerType = PayerType.USER,
+    settlement: SettlementStatus = SettlementStatus.NOT_APPLICABLE,
     needs_confirmation: bool = False,
     mentions: list[AmountMention] | None = None,
     quantities: list[QuantityMention] | None = None,
@@ -53,6 +55,7 @@ def event(
         title="Test event",
         category=ExpenseCategory.DINING,
         payer_type=payer,
+        settlement_status=settlement,
         merchant=merchant,
         user_net_amount=Decimal(value),
         currency=currency,
@@ -139,6 +142,20 @@ def test_amount_paid_by_someone_else_is_not_user_expense(
     assert result.total_paid_by_others == Decimal(value)
 
 
+def test_covered_event_total_is_normalized_to_paid_by_other() -> None:
+    covered = event(
+        "0",
+        payer=PayerType.OTHER_PERSON,
+        settlement=SettlementStatus.COVERED_BY_OTHER,
+        mentions=[amount("8", AmountRole.EVENT_TOTAL)],
+    )
+
+    result = response([covered], "0")
+
+    assert result.total_paid_by_others == Decimal(8)
+    assert result.spending_events[0].amount_mentions[0].role == AmountRole.PAID_BY_OTHER
+
+
 def test_ambiguous_payment_is_excluded_from_confirmed_total() -> None:
     confirmed = event("80")
     ambiguous = event("25", needs_confirmation=True)
@@ -198,18 +215,25 @@ def test_reference_date_is_parser_context_not_an_event_date_fallback(
     request = StoryParseRequest(
         text="I bought coffee beans.",
         reference_date=date(2026, 8, 23),
+        response_language="fr",
     )
     parsed_response = response([event("18")], "18")
-    captured_input: list[str] = []
+    captured_kwargs: list[dict] = []
 
     class FakeResponses:
         def parse(self, **kwargs):
-            captured_input.append(kwargs["input"])
-            return SimpleNamespace(output_parsed=parsed_response)
+            captured_kwargs.append(kwargs)
+            return SimpleNamespace(status="completed", output_parsed=parsed_response)
 
     monkeypatch.setattr(
         "app.services.story_parser_service.get_settings",
-        lambda: SimpleNamespace(openai_api_key="test-key", openai_model="test-model"),
+        lambda: SimpleNamespace(
+            openai_api_key="test-key",
+            openai_model="test-model",
+            openai_max_output_tokens=8_000,
+            openai_reasoning_effort="minimal",
+            openai_text_verbosity="low",
+        ),
     )
     parser = StoryParserService(
         client=SimpleNamespace(responses=FakeResponses()),  # type: ignore[arg-type]
@@ -217,5 +241,9 @@ def test_reference_date_is_parser_context_not_an_event_date_fallback(
 
     result = parser.parse(request)
 
-    assert "Reference date: 2026-08-23" in captured_input[0]
+    assert "Reference date: 2026-08-23" in captured_kwargs[0]["input"]
+    assert "Response language: fr" in captured_kwargs[0]["input"]
+    assert captured_kwargs[0]["max_output_tokens"] == 8_000
+    assert captured_kwargs[0]["reasoning"] == {"effort": "minimal"}
+    assert captured_kwargs[0]["text"] == {"verbosity": "low"}
     assert result.spending_events[0].event_date is None

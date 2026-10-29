@@ -216,6 +216,17 @@ def test_include_accepts_exact_date_supplied_in_same_patch(session: Session) -> 
     assert updated.totals_by_currency == {CurrencyCode.CAD: Decimal(18)}
 
 
+def test_zero_amount_cannot_be_marked_for_recording(session: Session) -> None:
+    service = FinancialDraftService(session)
+    event = spending_event("0")
+    draft = service.create(create_request([event]))
+
+    with pytest.raises(FinancialDraftConflictError, match="positive amount"):
+        include_event(service, draft, 0, event)
+
+    assert service.get(draft.id).events[0].disposition == DraftEventDisposition.PENDING
+
+
 def test_exclude_accepts_missing_merchant_and_date(session: Session) -> None:
     service = FinancialDraftService(session)
     incomplete = spending_event("18", merchant="   ", event_date=None)
@@ -277,18 +288,14 @@ def test_journal_parser_failure_is_safe_cors_json_and_retryable(
 
         def parse(self, _request: object) -> StoryParseResponse:
             if self.fail_during_parse:
-                raise StoryParserOutputError(
-                    "sensitive provider or configuration details"
-                )
+                raise StoryParserOutputError("sensitive provider or configuration details")
             return parsed
 
     def parser_factory() -> RetryableParser:
         nonlocal attempts
         attempts += 1
         if attempts == 1 and failure_type is StoryParserConfigurationError:
-            raise StoryParserConfigurationError(
-                "sensitive provider or configuration details"
-            )
+            raise StoryParserConfigurationError("sensitive provider or configuration details")
         return RetryableParser(
             fail_during_parse=(attempts == 1),
         )
@@ -544,9 +551,7 @@ def test_repaid_third_party_event_survives_review_and_creates_ledger_transaction
         "I bought coffee beans for 18 CAD, but my mother paid for them.",
         parsed,
     )
-    canonical_question = next(
-        item for item in initial.clarifications if item.status == "open"
-    )
+    canonical_question = next(item for item in initial.clarifications if item.status == "open")
     clarified = clarification_service.answer(
         initial.draft.id,
         ClarificationAnswersRequest(
@@ -561,15 +566,28 @@ def test_repaid_third_party_event_survives_review_and_creates_ledger_transaction
     )
     clarified_event = clarified.draft.events[0]
     assert clarified_event.event.user_net_amount == Decimal(18)
+    assert clarified_event.event.event_date is None
 
     draft_service = FinancialDraftService(session)
+    with pytest.raises(FinancialDraftConflictError, match="exact transaction date"):
+        draft_service.update_event(
+            clarified.draft.id,
+            clarified_event.id,
+            FinancialDraftEventUpdate(
+                expected_version=clarified.draft.version,
+                disposition=DraftEventDisposition.INCLUDE,
+                event=clarified_event.event,
+            ),
+        )
+
+    repayment_event = clarified_event.event.model_copy(update={"event_date": date(2026, 8, 10)})
     reviewed = draft_service.update_event(
         clarified.draft.id,
         clarified_event.id,
         FinancialDraftEventUpdate(
             expected_version=clarified.draft.version,
             disposition=DraftEventDisposition.INCLUDE,
-            event=clarified_event.event,
+            event=repayment_event,
         ),
     )
 
@@ -585,6 +603,18 @@ def test_repaid_third_party_event_survives_review_and_creates_ledger_transaction
     transaction = session.get(Transaction, confirmed.transaction_ids[0])
     assert transaction is not None
     assert transaction.amount == Decimal(18)
+    assert transaction.transaction_date == date(2026, 8, 10)
+
+
+def test_direct_draft_requires_repayment_date_review(session: Session) -> None:
+    event = spending_event("18", payer_type=PayerType.OTHER_PERSON)
+    event = event.model_copy(update={"settlement_status": SettlementStatus.REPAID_BY_USER})
+
+    draft = FinancialDraftService(session).create(create_request([event]))
+
+    assert draft.original_snapshot["spending_events"][0]["event_date"] == "2026-08-08"
+    assert draft.events[0].event.event_date is None
+    assert draft.totals_by_currency == {}
 
 
 @pytest.mark.parametrize(
@@ -640,9 +670,7 @@ def test_non_realized_third_party_settlement_stays_excluded(
         initial.draft.id,
         ClarificationAnswersRequest(
             expected_version=initial.draft.version,
-            answers=[
-                ClarificationAnswer(question_id=question.id, option_key=option_key)
-            ],
+            answers=[ClarificationAnswer(question_id=question.id, option_key=option_key)],
         ),
     )
     event = clarified.draft.events[0]

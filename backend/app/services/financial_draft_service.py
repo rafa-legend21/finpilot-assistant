@@ -59,7 +59,7 @@ class FinancialDraftService:
                     FinancialDraftEvent(
                         position=position,
                         disposition=DraftEventDisposition.PENDING.value,
-                        event_payload=event.model_dump(mode="json"),
+                        event_payload=self._event_for_review(event).model_dump(mode="json"),
                     )
                     for position, event in enumerate(submitted.spending_events)
                 ],
@@ -99,8 +99,7 @@ class FinancialDraftService:
             settlement_was_resolved = any(
                 clarification.related_event_id == event_id
                 and clarification.status == "answered"
-                and clarification.issue_type
-                == ClarificationIssueType.PAYER_RESPONSIBILITY.value
+                and clarification.issue_type == ClarificationIssueType.PAYER_RESPONSIBILITY.value
                 for clarification in draft.clarifications
             )
             if settlement_was_resolved and (
@@ -127,9 +126,7 @@ class FinancialDraftService:
             try:
                 merged_event = SpendingEvent.model_validate(payload)
             except ValidationError as exc:
-                raise FinancialDraftValidationError(
-                    "The reviewed draft event is invalid."
-                ) from exc
+                raise FinancialDraftValidationError("The reviewed draft event is invalid.") from exc
 
             self._validate_review_disposition(merged_event, request.disposition)
             draft_event.event_payload = merged_event.model_dump(mode="json")
@@ -229,6 +226,16 @@ class FinancialDraftService:
             raise FinancialDraftConflictError("The draft version is stale.")
 
     @staticmethod
+    def _event_for_review(event: SpendingEvent) -> SpendingEvent:
+        if (
+            event.payer_type == PayerType.OTHER_PERSON
+            and event.settlement_status == SettlementStatus.REPAID_BY_USER
+        ):
+            # The parsed date may be the purchase date, not the cash-outflow date.
+            return event.model_copy(update={"event_date": None})
+        return event
+
+    @staticmethod
     def _validated_event(draft_event: FinancialDraftEvent) -> SpendingEvent:
         try:
             return SpendingEvent.model_validate(draft_event.event_payload)
@@ -242,10 +249,14 @@ class FinancialDraftService:
         event: SpendingEvent,
         disposition: DraftEventDisposition,
     ) -> None:
-        if event.settlement_status in {
-            SettlementStatus.COVERED_BY_OTHER,
-            SettlementStatus.REPAYMENT_DUE,
-        } and disposition != DraftEventDisposition.EXCLUDE:
+        if (
+            event.settlement_status
+            in {
+                SettlementStatus.COVERED_BY_OTHER,
+                SettlementStatus.REPAYMENT_DUE,
+            }
+            and disposition != DraftEventDisposition.EXCLUDE
+        ):
             raise FinancialDraftConflictError(
                 "Third-party expenses not yet realized by the user must be excluded."
             )
@@ -258,9 +269,9 @@ class FinancialDraftService:
                 "Only user, shared, or completed repayment expenses may be included."
             )
         if disposition == DraftEventDisposition.INCLUDE and event.event_date is None:
-            raise FinancialDraftConflictError(
-                "Included events require an exact transaction date."
-            )
+            raise FinancialDraftConflictError("Included events require an exact transaction date.")
+        if disposition == DraftEventDisposition.INCLUDE and event.user_net_amount <= 0:
+            raise FinancialDraftConflictError("Included expenses must have a positive amount.")
 
     @staticmethod
     def _validate_included_event(event: SpendingEvent) -> None:
@@ -280,9 +291,7 @@ class FinancialDraftService:
                 "Only user or shared expenses may be included in this ledger version."
             )
         if event.event_date is None:
-            raise FinancialDraftConflictError(
-                "Included events require an exact transaction date."
-            )
+            raise FinancialDraftConflictError("Included events require an exact transaction date.")
         if event.user_net_amount <= 0:
             raise FinancialDraftConflictError("Included expenses must have a positive amount.")
 
@@ -310,7 +319,9 @@ class FinancialDraftService:
                     or event.settlement_status == SettlementStatus.REPAID_BY_USER
                 )
             ):
-                totals[event.currency] = totals.get(event.currency, Decimal(0)) + event.user_net_amount
+                totals[event.currency] = (
+                    totals.get(event.currency, Decimal(0)) + event.user_net_amount
+                )
 
         metadata = draft.working_metadata
         return FinancialDraftResponse(

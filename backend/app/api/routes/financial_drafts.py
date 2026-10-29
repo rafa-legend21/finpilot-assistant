@@ -57,6 +57,7 @@ def create_draft_from_journal(
                 text=request.text,
                 default_currency=request.default_currency,
                 reference_date=request.reference_date,
+                response_language=request.response_language,
             )
         )
     except StoryParserConfigurationError as exc:
@@ -69,7 +70,9 @@ def create_draft_from_journal(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="FinPilot could not process the journal right now. Please try again.",
         ) from exc
-    return ClarificationService(session).create_from_parse(request.text, parsed)
+    return ClarificationService(session).create_from_parse(
+        request.text, parsed, response_language=request.response_language
+    )
 
 
 @router.get(
