@@ -24,3 +24,6 @@ Thumbs.db
 # Secrets
 *.pem
 *.key
+
+# Local approved-commit sync state
+.finpilot-sync/
