@@ -21,7 +21,6 @@ finpilot-assistant/
 ├── mobile/                     Flutter application and widget tests
 ├── database/                   Bootstrap SQL and numbered migrations
 ├── docs/                       Product and engineering documentation
-├── finpilot-assistant-backup/  Earlier project snapshot
 └── docker-compose.yml
 ```
 
