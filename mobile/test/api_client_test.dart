@@ -66,6 +66,27 @@ void main() {
     );
   });
 
+  test('journal request carries the selected reply language', () async {
+    late Map<String, dynamic> requestBody;
+    final client = MockClient((request) async {
+      requestBody = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response('{"detail":"unavailable"}', 502);
+    });
+    final api = HttpFinPilotApi(client: client, baseUrl: 'http://test');
+
+    await expectLater(
+      api.createDraftFromJournal(
+        text: 'Ma mère a payé 18 euros.',
+        defaultCurrency: CurrencyCode.EUR,
+        responseLanguage: 'fr',
+      ),
+      throwsA(isA<ApiException>()),
+    );
+
+    expect(requestBody['response_language'], 'fr');
+    expect(requestBody['text'], 'Ma mère a payé 18 euros.');
+  });
+
   test('transport exception exposes the reachability error', () async {
     final client = MockClient(
       (request) async {

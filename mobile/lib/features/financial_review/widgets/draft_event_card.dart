@@ -4,10 +4,20 @@ import '../models/financial_review_models.dart';
 
 class DraftEventCard extends StatelessWidget {
   const DraftEventCard(
-      {required this.draftEvent, required this.onEdit, super.key});
+      {required this.draftEvent,
+      required this.onEdit,
+      this.responseLanguage = 'en',
+      super.key});
 
   final FinancialDraftEvent draftEvent;
   final VoidCallback onEdit;
+  final String responseLanguage;
+
+  String _t(String zh, String en, String fr) => switch (responseLanguage) {
+        'zh' => zh,
+        'fr' => fr,
+        _ => en,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -31,18 +41,18 @@ class DraftEventCard extends StatelessWidget {
                 ? Colors.green.shade700
                 : Theme.of(context).colorScheme.primary;
     final label = excluded
-        ? "Won't be recorded"
+        ? _t('不会记录', "Won't be recorded", 'Ne sera pas enregistré')
         : missingIncludedDate
-            ? 'Date required'
+            ? _t('需要日期', 'Date required', 'Date requise')
             : unresolved
                 ? event.needsConfirmation
-                    ? 'Needs confirmation'
-                    : 'Review needed'
+                    ? _t('需要确认', 'Needs confirmation', 'Confirmation requise')
+                    : _t('需要核对', 'Review needed', 'Vérification requise')
                 : draftEvent.disposition == DraftEventDisposition.include
-                    ? 'Will be recorded'
+                    ? _t('将会记录', 'Will be recorded', 'Sera enregistré')
                     : paidByOther
-                        ? 'Paid by others'
-                        : 'You paid';
+                        ? _t('他人付款', 'Paid by others', 'Payé par autrui')
+                        : _t('你已付款', 'You paid', 'Vous avez payé');
     final icon = excluded
         ? Icons.remove_circle_outline
         : unresolved
@@ -80,7 +90,7 @@ class DraftEventCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          'Event amount',
+                          _t('事件金额', 'Event amount', 'Montant de l’événement'),
                           key: const Key('eventAmountLabel'),
                           style: Theme.of(context).textTheme.labelSmall,
                         ),
@@ -117,7 +127,7 @@ class DraftEventCard extends StatelessWidget {
                     Chip(
                       avatar:
                           const Icon(Icons.calendar_today_outlined, size: 16),
-                      label: Text('Date: $savedDate'),
+                      label: Text('${_t('日期', 'Date', 'Date')}: $savedDate'),
                       visualDensity: VisualDensity.compact,
                     ),
                   Chip(
@@ -143,17 +153,18 @@ class DraftEventCard extends StatelessWidget {
   String _merchantLabel(SpendingEvent event) {
     final merchant = event.merchant;
     return merchant == null || merchant.trim().isEmpty
-        ? 'Unknown merchant'
+        ? _t('商家未知', 'Unknown merchant', 'Commerçant inconnu')
         : merchant;
   }
 
   String _payerLabel(SpendingEvent event) => switch (event.payerType) {
-        'user' => 'You paid',
-        'shared' => 'Shared',
+        'user' => _t('你已付款', 'You paid', 'Vous avez payé'),
+        'shared' => _t('共同承担', 'Shared', 'Partagé'),
         'other_person' => event.paidByName == null
-            ? 'Paid by someone else'
-            : 'Paid by ${event.paidByName}',
-        'employer' => 'Employer paid',
-        _ => 'Payer unknown',
+            ? _t('他人付款', 'Paid by someone else', 'Payé par une autre personne')
+            : _t('由 ${event.paidByName} 付款', 'Paid by ${event.paidByName}',
+                'Payé par ${event.paidByName}'),
+        'employer' => _t('雇主付款', 'Employer paid', 'Payé par l’employeur'),
+        _ => _t('付款人未知', 'Payer unknown', 'Payeur inconnu'),
       };
 }

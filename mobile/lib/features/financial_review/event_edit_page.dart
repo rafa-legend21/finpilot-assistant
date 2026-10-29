@@ -72,6 +72,12 @@ class _EventEditPageState extends State<EventEditPage> {
           'Enter a valid date in YYYY-MM-DD format to include this event.');
       return;
     }
+    if (disposition == DraftEventDisposition.include &&
+        num.parse(amount) <= 0) {
+      setState(() =>
+          _error = 'Enter the amount you actually paid to include this event.');
+      return;
+    }
     final edited = widget.draftEvent.event.edited(
       amount: amount,
       category: _category,
@@ -137,7 +143,10 @@ class _EventEditPageState extends State<EventEditPage> {
             controller: _amount,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
-              labelText: 'Your amount (${widget.draftEvent.event.currency})',
+              labelText: widget.draftEvent.event.settlementStatus ==
+                      'repaid_by_user'
+                  ? 'Amount you repaid (${widget.draftEvent.event.currency})'
+                  : 'Your amount (${widget.draftEvent.event.currency})',
               border: const OutlineInputBorder(),
             ),
           ),
@@ -184,7 +193,12 @@ class _EventEditPageState extends State<EventEditPage> {
           TextField(
             key: const Key('dateField'),
             controller: _date,
-            decoration: const InputDecoration(labelText: 'Date (YYYY-MM-DD)'),
+            decoration: InputDecoration(
+              labelText:
+                  widget.draftEvent.event.settlementStatus == 'repaid_by_user'
+                      ? 'Date you repaid them (YYYY-MM-DD)'
+                      : 'Date (YYYY-MM-DD)',
+            ),
           ),
           const SizedBox(height: 16),
           SegmentedButton<DraftEventDisposition>(

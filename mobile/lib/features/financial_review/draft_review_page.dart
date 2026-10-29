@@ -7,9 +7,13 @@ import 'widgets/draft_event_card.dart';
 
 class DraftReviewPage extends StatefulWidget {
   const DraftReviewPage(
-      {required this.api, required this.initialDraft, super.key});
+      {required this.api,
+      required this.initialDraft,
+      this.responseLanguage = 'en',
+      super.key});
   final FinPilotApi api;
   final FinancialDraft initialDraft;
+  final String responseLanguage;
 
   @override
   State<DraftReviewPage> createState() => _DraftReviewPageState();
@@ -20,6 +24,13 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
   bool _confirming = false;
   FinancialDraftConfirmation? _confirmation;
   String? _error;
+
+  String _t(String zh, String en, String fr) =>
+      switch (widget.responseLanguage) {
+        'zh' => zh,
+        'fr' => fr,
+        _ => en,
+      };
 
   @override
   void initState() {
@@ -121,13 +132,14 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
     if (_confirmation != null) return _success(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Review your draft'),
+        title:
+            Text(_t('核对草稿', 'Review your draft', 'Vérifier votre brouillon')),
         actions: [
           TextButton(
             onPressed: _confirming || _draft.status != DraftStatus.draft
                 ? null
                 : _cancel,
-            child: const Text('Cancel draft'),
+            child: Text(_t('取消草稿', 'Cancel draft', 'Annuler le brouillon')),
           ),
         ],
       ),
@@ -137,8 +149,8 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
           Text(_draft.summary, style: const TextStyle(fontSize: 16)),
           const SizedBox(height: 18),
           if (_draft.totalsByCurrency.isNotEmpty) ...[
-            const Text('Included totals',
-                style: TextStyle(fontWeight: FontWeight.w700)),
+            Text(_t('计入的总额', 'Included totals', 'Totaux inclus'),
+                style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -148,10 +160,11 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
                   .toList(),
             ),
           ] else if (_nothingWillBeRecorded) ...[
-            const Text(
-              'Nothing will be recorded',
-              key: Key('nothingRecordedMessage'),
-              style: TextStyle(fontWeight: FontWeight.w700),
+            Text(
+              _t('不会记录任何交易', 'Nothing will be recorded',
+                  'Aucune transaction ne sera enregistrée'),
+              key: const Key('nothingRecordedMessage'),
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ],
           if (_draft.confirmationQuestions.isNotEmpty) ...[
@@ -159,23 +172,27 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
             ..._draft.confirmationQuestions.map((question) => ListTile(
                   leading: const Icon(Icons.help_outline, color: Colors.amber),
                   title: Text(question['question'] as String? ??
-                      'Please review this event.'),
+                      _t('请核对这笔事件。', 'Please review this event.',
+                          'Veuillez vérifier cet événement.')),
                   subtitle: Text(question['reason'] as String? ?? ''),
                 )),
           ],
           const SizedBox(height: 12),
           if (_draft.events.isEmpty)
-            const Card(
+            Card(
               child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Text(
-                    'No financial events found. Go back and edit your journal entry.'),
+                padding: const EdgeInsets.all(20),
+                child: Text(_t(
+                    '没有找到财务事件。请返回并修改日记内容。',
+                    'No financial events found. Go back and edit your journal entry.',
+                    'Aucun événement financier trouvé. Revenez en arrière et modifiez votre récit.')),
               ),
             )
           else
             ..._draft.events.map((event) => DraftEventCard(
                   key: ValueKey(event.id),
                   draftEvent: event,
+                  responseLanguage: widget.responseLanguage,
                   onEdit: () => _edit(event),
                 )),
           if (_error != null)
@@ -194,12 +211,17 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (_pendingCount > 0)
-                Text(
-                    '$_pendingCount event${_pendingCount == 1 ? '' : 's'} still need review'),
+                Text(_t(
+                    '还有 $_pendingCount 笔事件需要核对',
+                    '$_pendingCount event${_pendingCount == 1 ? '' : 's'} still need review',
+                    '$_pendingCount événement(s) restent à vérifier')),
               if (_missingIncludedDateCount > 0)
-                const Text(
-                  'Review events marked Date required and add an exact transaction date.',
-                  key: Key('missingDateGuidance'),
+                Text(
+                  _t(
+                      '请为标记为需要日期的事件填写准确交易日期。',
+                      'Review events marked Date required and add an exact transaction date.',
+                      'Ajoutez une date exacte aux événements dont la date est requise.'),
+                  key: const Key('missingDateGuidance'),
                   textAlign: TextAlign.center,
                 ),
               const SizedBox(height: 8),
@@ -213,7 +235,9 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
                           dimension: 18,
                           child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.check_circle_outline),
-                  label: Text(_confirming ? 'Confirming…' : 'Confirm draft'),
+                  label: Text(_confirming
+                      ? _t('确认中…', 'Confirming…', 'Confirmation…')
+                      : _t('确认草稿', 'Confirm draft', 'Confirmer le brouillon')),
                 ),
               ),
             ],
@@ -224,7 +248,8 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
   }
 
   Widget _success(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Draft confirmed')),
+        appBar: AppBar(
+            title: Text(_t('草稿已确认', 'Draft confirmed', 'Brouillon confirmé'))),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -234,16 +259,18 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
                 Icon(Icons.check_circle,
                     size: 64, color: Colors.green.shade700),
                 const SizedBox(height: 16),
-                const Text('Draft confirmed',
+                Text(_t('草稿已确认', 'Draft confirmed', 'Brouillon confirmé'),
                     style:
-                        TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+                        const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
-                Text(
-                    '${_confirmation!.transactionIds.length} transaction(s) saved'),
+                Text(_t(
+                    '已保存 ${_confirmation!.transactionIds.length} 笔交易',
+                    '${_confirmation!.transactionIds.length} transaction(s) saved',
+                    '${_confirmation!.transactionIds.length} transaction(s) enregistrée(s)')),
                 const SizedBox(height: 20),
                 FilledButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Done'),
+                  child: Text(_t('完成', 'Done', 'Terminé')),
                 ),
               ],
             ),

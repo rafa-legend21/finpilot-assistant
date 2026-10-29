@@ -80,6 +80,8 @@ void main() {
     await tester.tap(find.text('Include'));
     await tester.pump();
 
+    expect(find.text('Date you repaid them (YYYY-MM-DD)'), findsOneWidget);
+
     await tester.tap(find.text('Save review'));
     await tester.pump();
     expect(api.updateCalls, 0);
@@ -105,6 +107,35 @@ void main() {
     await tester.tap(find.text('Save review'));
     await tester.pump();
     expect(api.updateCalls, 0);
+  });
+
+  testWidgets('zero repayment amount cannot be included', (tester) async {
+    final draft = _draft(
+      settlementStatus: 'repaid_by_user',
+      needsConfirmation: false,
+      eventDate: '2026-08-10',
+      amount: '0',
+    );
+    final api = _RecordingApi(draft);
+    await tester.pumpWidget(MaterialApp(
+      home: EventEditPage(
+        api: api,
+        draft: draft,
+        draftEvent: draft.events.first,
+      ),
+    ));
+
+    expect(find.text('Amount you repaid (CAD)'), findsOneWidget);
+    await tester.tap(find.text('Include'));
+    await tester.pump();
+    await tester.tap(find.text('Save review'));
+    await tester.pump();
+
+    expect(api.updateCalls, 0);
+    expect(
+      find.text('Enter the amount you actually paid to include this event.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('valid exact date and unknown merchant are sent without a label',
@@ -221,6 +252,7 @@ FinancialDraft _draft({
   String settlementStatus = 'unresolved',
   bool needsConfirmation = true,
   String? eventDate,
+  String amount = '18.00',
 }) =>
     FinancialDraft.fromJson({
       'id': 'draft-1',
@@ -242,7 +274,7 @@ FinancialDraft _draft({
             'payer_type': 'other_person',
             'paid_by_name': 'mother',
             'settlement_status': settlementStatus,
-            'user_net_amount': '18.00',
+            'user_net_amount': amount,
             'currency': 'CAD',
             'amount_mentions': [],
             'quantities': [],
