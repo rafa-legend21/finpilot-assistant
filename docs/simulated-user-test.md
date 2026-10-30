@@ -34,4 +34,6 @@ After a confirmed expense, `http://127.0.0.1:8000/api/v1/transactions` shows the
 
 For each journey, note whether the result was correct, where you hesitated, whether the wording felt reassuring, and what you expected the next button to do. A short note or screenshot of the unexpected screen is enough. Do not include personal financial details or an API key in feedback.
 
+Observed in the avoided-purchase journey: the review form still asks for **Payment responsibility** even though no payment happened. For now, select **Unknown**, keep **Your amount** at `0`, and choose **Exclude**. A future review form should make "not purchased" explicit and avoid asking who paid for an event that never happened.
+
 Stop both terminals with `Ctrl+C` when finished.

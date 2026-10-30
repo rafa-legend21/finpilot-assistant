@@ -162,6 +162,29 @@ void main() {
     expect(api.savedEvent?.merchant, isNull);
   });
 
+  testWidgets('review date adds separators as the user enters digits',
+      (tester) async {
+    final draft = _draft();
+    await tester.pumpWidget(MaterialApp(
+      home: EventEditPage(
+        api: _RecordingApi(draft),
+        draft: draft,
+        draftEvent: draft.events.first,
+      ),
+    ));
+
+    final dateField = find.byKey(const Key('dateField'));
+    final controller = tester.widget<TextField>(dateField).controller!;
+    await tester.enterText(dateField, '20260');
+    expect(controller.text, '2026-0');
+
+    await tester.enterText(dateField, '2026103');
+    expect(controller.text, '2026-10-3');
+
+    await tester.enterText(dateField, '2026-10-30');
+    expect(controller.text, '2026-10-30');
+  });
+
   testWidgets('a completed repayment can be included after normal review',
       (tester) async {
     final draft = _draft(

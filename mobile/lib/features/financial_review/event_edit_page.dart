@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
+import 'iso_date_input_formatter.dart';
 import 'models/financial_review_models.dart';
 
 class EventEditPage extends StatefulWidget {
@@ -193,6 +194,8 @@ class _EventEditPageState extends State<EventEditPage> {
           TextField(
             key: const Key('dateField'),
             controller: _date,
+            keyboardType: TextInputType.datetime,
+            inputFormatters: const [IsoDateInputFormatter()],
             decoration: InputDecoration(
               labelText:
                   widget.draftEvent.event.settlementStatus == 'repaid_by_user'
