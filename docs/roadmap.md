@@ -7,12 +7,13 @@ This is a proposed order of work, not a release schedule. The [project README](.
 - Story parsing into structured financial drafts
 - Required clarification and user review before expense ledger writes
 - PostgreSQL migrations and automated backend and mobile tests
+- Read-only transaction history and deterministic summaries by date, category, and currency
 - Flutter home screen with example figures
 
 ## Next: trustworthy records and a real overview
 
 1. Tighten shared-payment and repayment amount/date handling, with regression cases from real wording.
-2. Add transaction read and correction flows, then deterministic summaries by date, category, and currency.
+2. Add a reviewed transaction correction flow with a clear audit trail. Read-only history and deterministic summaries are in place.
 3. Replace home-screen example figures with sourced values, freshness labels, and clear unknown states.
 4. Add user identity and data access boundaries before using real users' financial histories.
 

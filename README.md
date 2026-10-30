@@ -9,9 +9,10 @@ The active application currently includes:
 - A Flutter journal, clarification, and event-review flow.
 - A FastAPI story parser and financial draft workflow. Confirmed expense events are saved with links to their source draft.
 - A PostgreSQL development database, explicit SQL migrations, Docker Compose, and automated tests.
+- Read-only transaction history and deterministic expense summaries by date, category, and currency.
 - A home screen with **example figures**, not live financial summaries.
 
-Transaction history, budget calculations, live insights, and impulse-spending support are planned. See the [roadmap](docs/roadmap.md).
+Transaction correction, budget calculations, live insights, and impulse-spending support are planned. See the [roadmap](docs/roadmap.md).
 
 ## Repository layout
 
@@ -94,6 +95,12 @@ flutter run --dart-define=API_BASE_URL=http://localhost:8000
 
 For Android Emulator, the host computer is commonly reached through `http://10.0.2.2:8000`.
 
+## Review recorded expenses
+
+`GET /api/v1/transactions` lists confirmed ledger entries, newest first. It accepts optional `start_date`, `end_date`, and `currency` filters, plus `limit` (1–100, default 50) and `offset`. The response includes `total_count` for pagination and source draft/event IDs for traceability.
+
+`GET /api/v1/transactions/summary` uses the same optional filters and returns totals grouped by currency, date, and category. Amounts are calculated from stored transactions, with each currency kept separate. An empty ledger returns empty lists and totals. These endpoints are for local development until user identity and data access controls are added.
+
 ## Financial and privacy boundaries
 
 - Never request or store online-banking passwords.
@@ -103,4 +110,4 @@ For Android Emulator, the host computer is commonly reached through `http://10.0
 
 ## Next work
 
-Priorities are financial-accuracy edge cases, a transaction read/correction flow, and a live overview based on known data. See the [roadmap](docs/roadmap.md) for the proposed sequence.
+Priorities are financial-accuracy edge cases, transaction correction, and a live overview based on known data. See the [roadmap](docs/roadmap.md) for the proposed sequence.
