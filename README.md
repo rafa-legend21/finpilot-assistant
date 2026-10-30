@@ -103,6 +103,8 @@ On Windows, use the [simulated user test guide](docs/simulated-user-test.md) to 
 
 `GET /api/v1/transactions/summary` uses the same optional filters and returns totals grouped by currency, date, and category. Amounts are calculated from stored transactions, with each currency kept separate. An empty ledger returns empty lists and totals. These endpoints are for local development until user identity and data access controls are added.
 
+`PATCH /api/v1/transactions/{id}` corrects a record with an `expected_version`, reason, and reviewed values. `POST /api/v1/transactions/{id}/void` removes it from spending totals without deleting it. `GET /api/v1/transactions/{id}/corrections` returns the change history. Default lists and summaries exclude voided records; `GET /api/v1/transactions?include_voided=true` includes them for audit.
+
 ## Financial and privacy boundaries
 
 - Never request or store online-banking passwords.

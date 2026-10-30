@@ -209,3 +209,125 @@ def test_reviewed_event_appears_only_after_confirmation(
     assert transactions[0]["amount"] == "18.00"
     assert transactions[0]["source_draft_id"] == str(draft.id)
     assert transactions[0]["source_event_id"] == str(draft.events[0].id)
+
+
+def test_correction_and_void_preserve_history_and_change_summary(
+    client: TestClient, api_session: Session
+) -> None:
+    row = Transaction(
+        amount=Decimal("18.00"),
+        currency="CAD",
+        category="dining",
+        transaction_date=date(2026, 8, 10),
+        merchant="Cafe",
+    )
+    api_session.add(row)
+    api_session.commit()
+
+    edited = client.patch(
+        f"/api/v1/transactions/{row.id}",
+        json={
+            "expected_version": 1,
+            "reason": "Receipt showed a different total",
+            "amount": "12.50",
+            "currency": "USD",
+            "category": "grocery",
+            "transaction_date": "2026-08-11",
+            "merchant": "Market",
+            "note": "Corrected from receipt",
+        },
+    )
+    assert edited.status_code == 200
+    assert edited.json()["version"] == 2
+    assert client.get("/api/v1/transactions/summary").json()["totals_by_currency"] == {
+        "USD": "12.50"
+    }
+    assert client.get("/api/v1/transactions/summary").json()["by_category"] == [
+        {"category": "grocery", "currency": "USD", "amount": "12.50"}
+    ]
+    assert (
+        client.patch(
+            f"/api/v1/transactions/{row.id}",
+            json={
+                "expected_version": 1,
+                "reason": "Stale edit",
+                "amount": "99.00",
+                "currency": "CAD",
+                "category": "dining",
+                "transaction_date": "2026-08-10",
+            },
+        ).status_code
+        == 409
+    )
+
+    voided = client.post(
+        f"/api/v1/transactions/{row.id}/void",
+        json={"expected_version": 2, "reason": "This was paid by a friend"},
+    )
+    assert voided.status_code == 200
+    assert voided.json()["version"] == 3
+    assert voided.json()["voided_at"] is not None
+    assert client.get("/api/v1/transactions").json()["total_count"] == 0
+    assert client.get("/api/v1/transactions/summary").json()["totals_by_currency"] == {}
+    assert client.get("/api/v1/transactions?include_voided=true").json()["total_count"] == 1
+    assert client.get(f"/api/v1/transactions/{row.id}").status_code == 200
+    history = client.get(f"/api/v1/transactions/{row.id}/corrections").json()
+    assert [entry["action"] for entry in history] == ["edit", "void"]
+    assert history[0]["before_state"]["amount"] == "18.00"
+    assert history[0]["after_state"]["amount"] == "12.50"
+    assert history[1]["reason"] == "This was paid by a friend"
+    assert history[1]["after_state"]["voided_at"] is not None
+    assert (
+        client.post(
+            f"/api/v1/transactions/{row.id}/void",
+            json={"expected_version": 3, "reason": "Double void"},
+        ).status_code
+        == 409
+    )
+
+
+def test_invalid_corrections_do_not_change_record(client: TestClient, api_session: Session) -> None:
+    row = Transaction(
+        amount=Decimal("18.00"),
+        currency="CAD",
+        category="dining",
+        transaction_date=date(2026, 8, 10),
+    )
+    api_session.add(row)
+    api_session.commit()
+    for amount in ("0", "-5", "1.234"):
+        response = client.patch(
+            f"/api/v1/transactions/{row.id}",
+            json={
+                "expected_version": 1,
+                "reason": "A valid reason",
+                "amount": amount,
+                "currency": "CAD",
+                "category": "dining",
+                "transaction_date": "2026-08-10",
+            },
+        )
+        assert response.status_code == 422
+    assert (
+        client.patch(
+            f"/api/v1/transactions/{row.id}",
+            json={
+                "expected_version": 1,
+                "reason": "Wrong transaction type",
+                "amount": "18.00",
+                "currency": "CAD",
+                "category": "transfer",
+                "transaction_date": "2026-08-10",
+            },
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            f"/api/v1/transactions/{row.id}/void",
+            json={"expected_version": 1, "reason": "   "},
+        ).status_code
+        == 422
+    )
+    assert client.get(f"/api/v1/transactions/{row.id}").json()["version"] == 1
+    assert client.get(f"/api/v1/transactions/{row.id}/corrections").json() == []

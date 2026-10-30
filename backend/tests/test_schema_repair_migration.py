@@ -25,6 +25,7 @@ EXPECTED_MIGRATION_CHECKSUMS = {
     2: "41a090fdc08e1c6673fa381865f84c3498789c8d4370dcd2cc9a6c46a54ea756",
     3: "98a9474f41fd98879ddd9aa3f9a5cb7e01b6732ef65d8093900f7c3f7c330058",
     4: "b99fa0efda24f354ecc16d5848e4fb65fb0a8eea4e4a2ba7cbf7a72684205a22",
+    5: "d6807d16c88071708df511c5be23f09638963b9f92c828e973e50d1236925ac3",
 }
 EXPECTED_ROUND_EXPRESSION = "((round_number >= 1) AND (round_number <= 3))"
 TEST_SCHEMA_PATTERN = re.compile(r"^test_schema_repair_[0-9a-f]{32}$")
@@ -602,7 +603,8 @@ def test_repairs_drifted_schema_and_preserves_rows(
             )
         ).all()
 
-    runner = MigrationRunner(engine, MIGRATION_DIRECTORY, use_advisory_lock=False)
+    through_004 = _copy_migrations(tmp_path / "through_004", (1, 2, 3, 4))
+    runner = MigrationRunner(engine, through_004, use_advisory_lock=False)
     assert runner.run() == [
         "003_repair_schema_drift.sql",
         "004_allow_unknown_transaction_merchant.sql",
@@ -655,10 +657,46 @@ def test_fresh_schema_applies_all_migrations_and_remains_correct(
         "002_draft_clarifications.sql",
         "003_repair_schema_drift.sql",
         "004_allow_unknown_transaction_merchant.sql",
+        "005_transaction_corrections.sql",
     ]
     assert runner.run() == []
     _assert_repaired_constraints(isolated_postgres.engine)
     _assert_nullable_merchant_policy(isolated_postgres.engine)
+
+
+def test_transaction_correction_migration_preserves_existing_expenses(
+    isolated_postgres: IsolatedPostgres,
+    tmp_path: Path,
+) -> None:
+    engine = isolated_postgres.engine
+    through_004 = _copy_migrations(tmp_path / "through_004", (1, 2, 3, 4))
+    MigrationRunner(engine, through_004, use_advisory_lock=False).run()
+    _insert_base_data(engine)
+    with engine.connect() as connection:
+        before = connection.execute(
+            text(
+                "SELECT id, amount, currency, category, source_draft_id, source_event_id "
+                "FROM transactions ORDER BY id"
+            )
+        ).all()
+
+    runner = MigrationRunner(engine, MIGRATION_DIRECTORY, use_advisory_lock=False)
+    assert runner.run() == ["005_transaction_corrections.sql"]
+    assert runner.run() == []
+    with engine.connect() as connection:
+        after = connection.execute(
+            text(
+                "SELECT id, amount, currency, category, source_draft_id, source_event_id "
+                "FROM transactions ORDER BY id"
+            )
+        ).all()
+        version_and_void = connection.execute(
+            text("SELECT version, voided_at FROM transactions ORDER BY id")
+        ).all()
+        correction_count = connection.scalar(text("SELECT COUNT(*) FROM transaction_corrections"))
+    assert after == before
+    assert all(version == 1 and voided_at is None for version, voided_at in version_and_void)
+    assert correction_count == 0
 
 
 def test_nullable_merchant_migration_upgrades_003_schema_without_data_loss(
@@ -706,7 +744,8 @@ def test_nullable_merchant_migration_upgrades_003_schema_without_data_loss(
         "ix_transactions_transaction_date",
     }.issubset({name for name, _ in before_indexes})
 
-    runner = MigrationRunner(engine, MIGRATION_DIRECTORY, use_advisory_lock=False)
+    through_004 = _copy_migrations(tmp_path / "through_004", (1, 2, 3, 4))
+    runner = MigrationRunner(engine, through_004, use_advisory_lock=False)
     assert runner.run() == ["004_allow_unknown_transaction_merchant.sql"]
     assert runner.run() == []
 
