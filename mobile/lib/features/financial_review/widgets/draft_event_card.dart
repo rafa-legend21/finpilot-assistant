@@ -67,11 +67,11 @@ class DraftEventCard extends StatelessWidget {
       color: excluded ? Colors.grey.shade100 : null,
       shape: RoundedRectangleBorder(
         side: BorderSide(color: color, width: unresolved ? 2 : 1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(18),
       ),
       child: InkWell(
         onTap: onEdit,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(18),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(

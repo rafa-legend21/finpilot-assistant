@@ -6,6 +6,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('French Assistant fits a narrow phone', (tester) async {
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester
+        .pumpWidget(MaterialApp(home: JournalEntryPage(api: _CapturingApi())));
+    await tester.tap(find.byKey(const Key('voiceLanguage')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Français').last);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('journalSubmit')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('confirmed draft clears the journal on return', (tester) async {
     await tester
         .pumpWidget(MaterialApp(home: JournalEntryPage(api: _FlowApi())));

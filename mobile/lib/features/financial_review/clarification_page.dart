@@ -129,97 +129,104 @@ class _ClarificationPageState extends State<ClarificationPage> {
       appBar: AppBar(
           title: Text(
               _t('请确认一下', 'A quick clarification', 'Une petite précision'))),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          ClarificationBubble(text: widget.journal, isUser: true),
-          ..._state.clarifications
-              .where((item) => item.status == 'answered')
-              .expand(
-                (item) => [
-                  ClarificationBubble(
-                    text: item.question,
-                    subtitle: item.reason,
-                    isUser: false,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            children: [
+              ClarificationBubble(text: widget.journal, isUser: true),
+              ..._state.clarifications
+                  .where((item) => item.status == 'answered')
+                  .expand(
+                    (item) => [
+                      ClarificationBubble(
+                        text: item.question,
+                        subtitle: item.reason,
+                        isUser: false,
+                      ),
+                      ClarificationBubble(
+                        text: _answerText(item),
+                        isUser: true,
+                      ),
+                    ],
                   ),
-                  ClarificationBubble(
-                    text: _answerText(item),
-                    isUser: true,
+              if (openQuestion != null) ...[
+                ClarificationBubble(
+                  key: const Key('activeClarification'),
+                  text: openQuestion.question,
+                  subtitle: openQuestion.reason,
+                  isUser: false,
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: openQuestion.options
+                      .map((option) => OutlinedButton(
+                            onPressed: _submitting
+                                ? null
+                                : () => _answer(optionKey: option.optionKey),
+                            child: Text(option.label),
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  key: const Key('clarificationFreeText'),
+                  controller: _freeText,
+                  enabled: !_submitting,
+                  decoration: InputDecoration(
+                    labelText: _t('其他情况', 'Something else', 'Autre réponse'),
+                    border: const OutlineInputBorder(),
                   ),
-                ],
-              ),
-          if (openQuestion != null) ...[
-            ClarificationBubble(
-              key: const Key('activeClarification'),
-              text: openQuestion.question,
-              subtitle: openQuestion.reason,
-              isUser: false,
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: openQuestion.options
-                  .map((option) => OutlinedButton(
-                        onPressed: _submitting
-                            ? null
-                            : () => _answer(optionKey: option.optionKey),
-                        child: Text(option.label),
-                      ))
-                  .toList(),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              key: const Key('clarificationFreeText'),
-              controller: _freeText,
-              enabled: !_submitting,
-              decoration: InputDecoration(
-                labelText: _t('其他情况', 'Something else', 'Autre réponse'),
-                border: const OutlineInputBorder(),
-              ),
-              minLines: 2,
-              maxLines: 4,
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton(
-                onPressed: _submitting || _freeText.text.trim().isEmpty
-                    ? null
-                    : () => _answer(freeText: _freeText.text.trim()),
-                child: Text(_submitting
-                    ? _t('发送中…', 'Sending…', 'Envoi…')
-                    : _t('发送回答', 'Send answer', 'Envoyer la réponse')),
-              ),
-            ),
-          ] else ...[
-            const SizedBox(height: 20),
-            const Icon(Icons.check_circle_outline,
-                size: 48, color: Colors.green),
-            const SizedBox(height: 10),
-            Text(
-              _t('草稿已准备好，请核对', 'Your draft is ready to review',
-                  'Votre brouillon est prêt à être vérifié'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 14),
-            FilledButton(
-              onPressed: _reviewDraft,
-              child: Text(_t('核对草稿', 'Review draft', 'Vérifier le brouillon')),
-            ),
-          ],
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                _error!,
-                key: const Key('clarificationError'),
-                style: TextStyle(color: Colors.red.shade700),
-              ),
-            ),
-        ],
+                  minLines: 2,
+                  maxLines: 4,
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(
+                    onPressed: _submitting || _freeText.text.trim().isEmpty
+                        ? null
+                        : () => _answer(freeText: _freeText.text.trim()),
+                    child: Text(_submitting
+                        ? _t('发送中…', 'Sending…', 'Envoi…')
+                        : _t('发送回答', 'Send answer', 'Envoyer la réponse')),
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 20),
+                const Icon(Icons.check_circle_outline,
+                    size: 48, color: Colors.green),
+                const SizedBox(height: 10),
+                Text(
+                  _t('草稿已准备好，请核对', 'Your draft is ready to review',
+                      'Votre brouillon est prêt à être vérifié'),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 14),
+                FilledButton(
+                  onPressed: _reviewDraft,
+                  child:
+                      Text(_t('核对草稿', 'Review draft', 'Vérifier le brouillon')),
+                ),
+              ],
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    _error!,
+                    key: const Key('clarificationError'),
+                    style: TextStyle(color: Colors.red.shade700),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

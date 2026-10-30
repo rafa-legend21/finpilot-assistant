@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
+import '../../core/finpilot_theme.dart';
 import 'event_edit_page.dart';
 import 'models/financial_review_models.dart';
 import 'widgets/draft_event_card.dart';
@@ -166,104 +167,149 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
-        children: [
-          Text(_draft.summary, style: const TextStyle(fontSize: 16)),
-          const SizedBox(height: 18),
-          if (_draft.totalsByCurrency.isNotEmpty) ...[
-            Text(_t('计入的总额', 'Included totals', 'Totaux inclus'),
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: _draft.totalsByCurrency.entries
-                  .map((entry) =>
-                      Chip(label: Text('${entry.key} ${entry.value}')))
-                  .toList(),
-            ),
-          ] else if (_nothingWillBeRecorded) ...[
-            Text(
-              _t('不会记录任何交易', 'Nothing will be recorded',
-                  'Aucune transaction ne sera enregistrée'),
-              key: const Key('nothingRecordedMessage'),
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ],
-          if (_draft.confirmationQuestions.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            ..._draft.confirmationQuestions.map((question) => ListTile(
-                  leading: const Icon(Icons.help_outline, color: Colors.amber),
-                  title: Text(question['question'] as String? ??
-                      _t('请核对这笔事件。', 'Please review this event.',
-                          'Veuillez vérifier cet événement.')),
-                  subtitle: Text(question['reason'] as String? ?? ''),
-                )),
-          ],
-          const SizedBox(height: 12),
-          if (_draft.events.isEmpty)
-            Card(
-              child: Padding(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
+            children: [
+              Container(
                 padding: const EdgeInsets.all(20),
-                child: Text(_t(
-                    '没有找到财务事件。请返回并修改日记内容。',
-                    'No financial events found. Go back and edit your journal entry.',
-                    'Aucun événement financier trouvé. Revenez en arrière et modifiez votre récit.')),
+                decoration: BoxDecoration(
+                  color: FinPilotColors.mint,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.fact_check_outlined,
+                        color: FinPilotColors.forest, size: 28),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                              _t('核对摘要', 'Review summary', 'Résumé à vérifier'),
+                              style: const TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 7),
+                          Text(_draft.summary,
+                              style: const TextStyle(height: 1.4)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            )
-          else
-            ..._draft.events.map((event) => DraftEventCard(
-                  key: ValueKey(event.id),
-                  draftEvent: event,
-                  responseLanguage: widget.responseLanguage,
-                  onEdit: () => _edit(event),
-                )),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(_error!,
-                  key: const Key('draftError'),
-                  style: TextStyle(color: Colors.red.shade700)),
-            ),
-        ],
+              const SizedBox(height: 20),
+              Text(_t('财务事件', 'Financial events', 'Événements financiers'),
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              if (_draft.totalsByCurrency.isNotEmpty) ...[
+                Text(_t('计入的总额', 'Included totals', 'Totaux inclus'),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: _draft.totalsByCurrency.entries
+                      .map((entry) =>
+                          Chip(label: Text('${entry.key} ${entry.value}')))
+                      .toList(),
+                ),
+              ] else if (_nothingWillBeRecorded) ...[
+                Text(
+                  _t('不会记录任何交易', 'Nothing will be recorded',
+                      'Aucune transaction ne sera enregistrée'),
+                  key: const Key('nothingRecordedMessage'),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ],
+              if (_draft.confirmationQuestions.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                ..._draft.confirmationQuestions.map((question) => ListTile(
+                      leading:
+                          const Icon(Icons.help_outline, color: Colors.amber),
+                      title: Text(question['question'] as String? ??
+                          _t('请核对这笔事件。', 'Please review this event.',
+                              'Veuillez vérifier cet événement.')),
+                      subtitle: Text(question['reason'] as String? ?? ''),
+                    )),
+              ],
+              const SizedBox(height: 12),
+              if (_draft.events.isEmpty)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Text(_t(
+                        '没有找到财务事件。请返回并修改日记内容。',
+                        'No financial events found. Go back and edit your journal entry.',
+                        'Aucun événement financier trouvé. Revenez en arrière et modifiez votre récit.')),
+                  ),
+                )
+              else
+                ..._draft.events.map((event) => DraftEventCard(
+                      key: ValueKey(event.id),
+                      draftEvent: event,
+                      responseLanguage: widget.responseLanguage,
+                      onEdit: () => _edit(event),
+                    )),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(_error!,
+                      key: const Key('draftError'),
+                      style: TextStyle(color: Colors.red.shade700)),
+                ),
+            ],
+          ),
+        ),
       ),
       bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_pendingCount > 0)
-                Text(_t(
-                    '还有 $_pendingCount 笔事件需要核对',
-                    '$_pendingCount event${_pendingCount == 1 ? '' : 's'} still need review',
-                    '$_pendingCount événement(s) restent à vérifier')),
-              if (_missingIncludedDateCount > 0)
-                Text(
-                  _t(
-                      '请为标记为需要日期的事件填写准确交易日期。',
-                      'Review events marked Date required and add an exact transaction date.',
-                      'Ajoutez une date exacte aux événements dont la date est requise.'),
-                  key: const Key('missingDateGuidance'),
-                  textAlign: TextAlign.center,
-                ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  key: const Key('confirmDraftButton'),
-                  onPressed: _canConfirm ? _confirm : null,
-                  icon: _confirming
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.check_circle_outline),
-                  label: Text(_confirming
-                      ? _t('确认中…', 'Confirming…', 'Confirmation…')
-                      : _t('确认草稿', 'Confirm draft', 'Confirmer le brouillon')),
-                ),
+        child: Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_pendingCount > 0)
+                    Text(_t(
+                        '还有 $_pendingCount 笔事件需要核对',
+                        '$_pendingCount event${_pendingCount == 1 ? '' : 's'} still need review',
+                        '$_pendingCount événement(s) restent à vérifier')),
+                  if (_missingIncludedDateCount > 0)
+                    Text(
+                      _t(
+                          '请为标记为需要日期的事件填写准确交易日期。',
+                          'Review events marked Date required and add an exact transaction date.',
+                          'Ajoutez une date exacte aux événements dont la date est requise.'),
+                      key: const Key('missingDateGuidance'),
+                      textAlign: TextAlign.center,
+                    ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      key: const Key('confirmDraftButton'),
+                      onPressed: _canConfirm ? _confirm : null,
+                      icon: _confirming
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.check_circle_outline),
+                      label: Text(_confirming
+                          ? _t('确认中…', 'Confirming…', 'Confirmation…')
+                          : _t('确认草稿', 'Confirm draft',
+                              'Confirmer le brouillon')),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

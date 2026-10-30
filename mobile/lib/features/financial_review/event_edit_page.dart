@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
+import '../../core/finpilot_theme.dart';
 import 'category_labels.dart';
 import 'iso_date_input_formatter.dart';
 import 'models/financial_review_models.dart';
@@ -165,139 +166,215 @@ class _EventEditPageState extends State<EventEditPage> {
     return Scaffold(
       appBar: AppBar(
           title: Text(_t('核对事件', 'Review event', 'Vérifier l’événement'))),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(widget.draftEvent.event.sourceText,
-              style: TextStyle(color: Colors.grey.shade700)),
-          const SizedBox(height: 16),
-          TextField(
-            key: const Key('amountField'),
-            controller: _amount,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: widget.draftEvent.event.settlementStatus ==
-                      'repaid_by_user'
-                  ? '${_t('你偿还的金额', 'Amount you repaid', 'Montant remboursé')} (${widget.draftEvent.event.currency})'
-                  : '${_t('你的支出金额', 'Your amount', 'Votre montant')} (${widget.draftEvent.event.currency})',
-              border: const OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _category,
-            decoration:
-                InputDecoration(labelText: _t('类别', 'Category', 'Catégorie')),
-            items: expenseCategories
-                .map((category) => DropdownMenuItem(
-                    value: category,
-                    child:
-                        Text(categoryLabel(category, widget.responseLanguage))))
-                .toList(),
-            onChanged:
-                _saving ? null : (value) => setState(() => _category = value!),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _payer,
-            decoration: InputDecoration(
-                labelText: _t('付款责任', 'Payment responsibility',
-                    'Responsabilité du paiement')),
-            items: {
-              'user': _t('你已付款', 'You paid', 'Vous avez payé'),
-              'shared': _t('共同承担', 'Shared', 'Partagé'),
-              'other_person':
-                  _t('他人付款', 'Someone else paid', 'Une autre personne a payé'),
-              'employer': _t('雇主付款', 'Employer paid', 'L’employeur a payé'),
-              'unknown': _t('未知', 'Unknown', 'Inconnu'),
-            }
-                .entries
-                .map((entry) => DropdownMenuItem(
-                    value: entry.key, child: Text(entry.value)))
-                .toList(),
-            onChanged:
-                _saving ? null : (value) => setState(() => _payer = value!),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            key: const Key('merchantField'),
-            controller: _merchant,
-            decoration: InputDecoration(
-              labelText: _t(
-                  '商家（可选）', 'Merchant (optional)', 'Commerçant (facultatif)'),
-              helperText: _t('不知道可留空', 'Leave blank if unknown',
-                  'Laissez vide si vous ne savez pas'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            key: const Key('dateField'),
-            controller: _date,
-            keyboardType: TextInputType.datetime,
-            inputFormatters: const [IsoDateInputFormatter()],
-            decoration: InputDecoration(
-              labelText:
-                  widget.draftEvent.event.settlementStatus == 'repaid_by_user'
-                      ? _t(
-                          '偿还日期 (YYYY-MM-DD)',
-                          'Date you repaid them (YYYY-MM-DD)',
-                          'Date du remboursement (AAAA-MM-JJ)')
-                      : _t('日期 (YYYY-MM-DD)', 'Date (YYYY-MM-DD)',
-                          'Date (AAAA-MM-JJ)'),
-            ),
-          ),
-          const SizedBox(height: 16),
-          SegmentedButton<DraftEventDisposition>(
-            segments: [
-              ButtonSegment(
-                value: DraftEventDisposition.pending,
-                label: Text(_t('待核对', 'Pending', 'En attente')),
-                enabled: false,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: FinPilotColors.mint,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.format_quote_rounded,
+                        color: FinPilotColors.forest),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_t('你的原话', 'From your story', 'Votre récit'),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 6),
+                          Text(widget.draftEvent.event.sourceText),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              ButtonSegment(
-                  value: DraftEventDisposition.include,
-                  label: Text(_t('记录', 'Include', 'Inclure'))),
-              ButtonSegment(
-                  value: DraftEventDisposition.exclude,
-                  label: Text(_t('不记录', 'Exclude', 'Exclure'))),
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                          _t('财务详情', 'Financial details', 'Détails financiers'),
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 16),
+                      TextField(
+                        key: const Key('amountField'),
+                        controller: _amount,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: InputDecoration(
+                          labelText: widget.draftEvent.event.settlementStatus ==
+                                  'repaid_by_user'
+                              ? '${_t('你偿还的金额', 'Amount you repaid', 'Montant remboursé')} (${widget.draftEvent.event.currency})'
+                              : '${_t('你的支出金额', 'Your amount', 'Votre montant')} (${widget.draftEvent.event.currency})',
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: _category,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                            labelText: _t('类别', 'Category', 'Catégorie')),
+                        items: expenseCategories
+                            .map((category) => DropdownMenuItem(
+                                value: category,
+                                child: Text(
+                                    categoryLabel(
+                                        category, widget.responseLanguage),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis)))
+                            .toList(),
+                        onChanged: _saving
+                            ? null
+                            : (value) => setState(() => _category = value!),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(_t('付款与日期', 'Payment and date', 'Paiement et date'),
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 14),
+                      DropdownButtonFormField<String>(
+                        initialValue: _payer,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                            labelText: _t('付款责任', 'Payment responsibility',
+                                'Responsabilité du paiement')),
+                        items: {
+                          'user': _t('你已付款', 'You paid', 'Vous avez payé'),
+                          'shared': _t('共同承担', 'Shared', 'Partagé'),
+                          'other_person': _t('他人付款', 'Someone else paid',
+                              'Une autre personne a payé'),
+                          'employer':
+                              _t('雇主付款', 'Employer paid', 'L’employeur a payé'),
+                          'unknown': _t('未知', 'Unknown', 'Inconnu'),
+                        }
+                            .entries
+                            .map((entry) => DropdownMenuItem(
+                                value: entry.key,
+                                child: Text(entry.value,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis)))
+                            .toList(),
+                        onChanged: _saving
+                            ? null
+                            : (value) => setState(() => _payer = value!),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const Key('merchantField'),
+                        controller: _merchant,
+                        decoration: InputDecoration(
+                          labelText: _t('商家（可选）', 'Merchant (optional)',
+                              'Commerçant (facultatif)'),
+                          helperText: _t('不知道可留空', 'Leave blank if unknown',
+                              'Laissez vide si vous ne savez pas'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const Key('dateField'),
+                        controller: _date,
+                        keyboardType: TextInputType.datetime,
+                        inputFormatters: const [IsoDateInputFormatter()],
+                        decoration: InputDecoration(
+                          labelText: widget.draftEvent.event.settlementStatus ==
+                                  'repaid_by_user'
+                              ? _t(
+                                  '偿还日期 (YYYY-MM-DD)',
+                                  'Date you repaid them (YYYY-MM-DD)',
+                                  'Date du remboursement (AAAA-MM-JJ)')
+                              : _t('日期 (YYYY-MM-DD)', 'Date (YYYY-MM-DD)',
+                                  'Date (AAAA-MM-JJ)'),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                          _t('是否记录？', 'Record this event?',
+                              'Enregistrer cet événement ?'),
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 12),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SegmentedButton<DraftEventDisposition>(
+                          segments: [
+                            ButtonSegment(
+                              value: DraftEventDisposition.pending,
+                              label: Text(_t('待核对', 'Pending', 'En attente')),
+                              enabled: false,
+                            ),
+                            ButtonSegment(
+                                value: DraftEventDisposition.include,
+                                label: Text(_t('记录', 'Include', 'Inclure'))),
+                            ButtonSegment(
+                                value: DraftEventDisposition.exclude,
+                                label: Text(_t('不记录', 'Exclude', 'Exclure'))),
+                          ],
+                          selected: {_disposition},
+                          onSelectionChanged: _saving
+                              ? null
+                              : (values) =>
+                                  setState(() => _disposition = values.first),
+                        ),
+                      ),
+                      if (_disposition == DraftEventDisposition.pending)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Text(_t(
+                              '保存前请选择记录或不记录。',
+                              'Choose Include or Exclude before saving this review.',
+                              'Choisissez Inclure ou Exclure avant d’enregistrer.')),
+                        ),
+                      if (_error != null) ...[
+                        const SizedBox(height: 14),
+                        Text(_error!,
+                            key: const Key('editError'),
+                            style: TextStyle(color: Colors.red.shade700)),
+                      ],
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: _saving ||
+                                  _disposition == DraftEventDisposition.pending
+                              ? null
+                              : _save,
+                          child: Text(_saving
+                              ? _t('保存中…', 'Saving…', 'Enregistrement…')
+                              : _t('保存核对结果', 'Save review',
+                                  'Enregistrer la vérification')),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _t(
+                            '确认草稿前，FinPilot 会再次验证此事件。',
+                            'FinPilot will validate this event again on the server before confirmation.',
+                            'FinPilot vérifiera à nouveau cet événement avant la confirmation.'),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
-            selected: {_disposition},
-            onSelectionChanged: _saving
-                ? null
-                : (values) => setState(() => _disposition = values.first),
           ),
-          if (_disposition == DraftEventDisposition.pending)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Text(_t(
-                  '保存前请选择记录或不记录。',
-                  'Choose Include or Exclude before saving this review.',
-                  'Choisissez Inclure ou Exclure avant d’enregistrer.')),
-            ),
-          if (_error != null) ...[
-            const SizedBox(height: 14),
-            Text(_error!,
-                key: const Key('editError'),
-                style: TextStyle(color: Colors.red.shade700)),
-          ],
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _saving || _disposition == DraftEventDisposition.pending
-                ? null
-                : _save,
-            child: Text(_saving
-                ? _t('保存中…', 'Saving…', 'Enregistrement…')
-                : _t('保存核对结果', 'Save review', 'Enregistrer la vérification')),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _t(
-                '确认草稿前，FinPilot 会再次验证此事件。',
-                'FinPilot will validate this event again on the server before confirmation.',
-                'FinPilot vérifiera à nouveau cet événement avant la confirmation.'),
-            textAlign: TextAlign.center,
-          ),
-        ],
+        ),
       ),
     );
   }

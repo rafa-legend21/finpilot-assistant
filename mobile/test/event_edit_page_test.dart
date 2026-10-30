@@ -5,6 +5,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('French review controls fit a narrow phone', (tester) async {
+    tester.view.physicalSize = const Size(320, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final draft = _draft();
+
+    await tester.pumpWidget(MaterialApp(
+      home: EventEditPage(
+        api: _RecordingApi(draft),
+        draft: draft,
+        draftEvent: draft.events.first,
+        responseLanguage: 'fr',
+      ),
+    ));
+    await tester.ensureVisible(find.text('Enregistrer la vérification'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enregistrer la vérification'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('French review translates fields, choices and validation',
       (tester) async {
     final draft = _draft(settlementStatus: 'repaid_by_user');
@@ -32,22 +54,20 @@ void main() {
         findsOneWidget);
     expect(find.text('Payment responsibility'), findsNothing);
 
-    await tester.tap(find.text('Inclure'));
+    await _tapVisible(tester, find.text('Inclure'));
     await tester.pump();
-    await tester.ensureVisible(find.text('Enregistrer la vérification'));
-    await tester.tap(find.text('Enregistrer la vérification'));
+    await _tapVisible(tester, find.text('Enregistrer la vérification'));
     await tester.pump();
     expect(find.textContaining('saisissez une date valide'), findsOneWidget);
     expect(api.updateCalls, 0);
 
-    await tester.tap(find.text('Épicerie'));
+    await _tapVisible(tester, find.text('Épicerie'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Restauration').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Exclure'));
+    await _tapVisible(tester, find.text('Exclure'));
     await tester.pump();
-    await tester.ensureVisible(find.text('Enregistrer la vérification'));
-    await tester.tap(find.text('Enregistrer la vérification'));
+    await _tapVisible(tester, find.text('Enregistrer la vérification'));
     await tester.pumpAndSettle();
     expect(api.savedEvent?.category, 'dining');
     expect(api.savedDisposition, DraftEventDisposition.exclude);
@@ -123,9 +143,9 @@ void main() {
           EventEditPage(api: api, draft: draft, draftEvent: draft.events.first),
     ));
 
-    await tester.tap(find.text('Exclude'));
+    await _tapVisible(tester, find.text('Exclude'));
     await tester.pump();
-    await tester.tap(find.text('Save review'));
+    await _tapVisible(tester, find.text('Save review'));
     await tester.pumpAndSettle();
 
     expect(api.savedEvent?.needsConfirmation, isTrue);
@@ -147,12 +167,12 @@ void main() {
       ),
     ));
 
-    await tester.tap(find.text('Include'));
+    await _tapVisible(tester, find.text('Include'));
     await tester.pump();
 
     expect(find.text('Date you repaid them (YYYY-MM-DD)'), findsOneWidget);
 
-    await tester.tap(find.text('Save review'));
+    await _tapVisible(tester, find.text('Save review'));
     await tester.pump();
     expect(api.updateCalls, 0);
     expect(
@@ -163,18 +183,14 @@ void main() {
 
     await tester.enterText(find.byKey(const Key('dateField')), '08/08/2026');
     tester.testTextInput.hide();
-    await tester.drag(find.byType(ListView), const Offset(0, -400));
-    await tester.pump();
-    await tester.tap(find.text('Save review'));
+    await _tapVisible(tester, find.text('Save review'));
     await tester.pump();
     expect(api.updateCalls, 0);
 
     await tester.ensureVisible(find.byKey(const Key('dateField')));
     await tester.enterText(find.byKey(const Key('dateField')), '2026-02-30');
     tester.testTextInput.hide();
-    await tester.drag(find.byType(ListView), const Offset(0, -400));
-    await tester.pump();
-    await tester.tap(find.text('Save review'));
+    await _tapVisible(tester, find.text('Save review'));
     await tester.pump();
     expect(api.updateCalls, 0);
   });
@@ -196,9 +212,9 @@ void main() {
     ));
 
     expect(find.text('Amount you repaid (CAD)'), findsOneWidget);
-    await tester.tap(find.text('Include'));
+    await _tapVisible(tester, find.text('Include'));
     await tester.pump();
-    await tester.tap(find.text('Save review'));
+    await _tapVisible(tester, find.text('Save review'));
     await tester.pump();
 
     expect(api.updateCalls, 0);
@@ -221,9 +237,9 @@ void main() {
       ),
     ));
 
-    await tester.tap(find.text('Include'));
+    await _tapVisible(tester, find.text('Include'));
     await tester.enterText(find.byKey(const Key('dateField')), '2026-08-08');
-    await tester.tap(find.text('Save review'));
+    await _tapVisible(tester, find.text('Save review'));
     await tester.pumpAndSettle();
 
     expect(api.updateCalls, 1);
@@ -299,9 +315,9 @@ void main() {
       ),
     ));
 
-    await tester.tap(find.text('Include'));
+    await _tapVisible(tester, find.text('Include'));
     await tester.pump();
-    await tester.tap(find.text('Save review'));
+    await _tapVisible(tester, find.text('Save review'));
     await tester.pumpAndSettle();
 
     expect(api.savedDisposition, DraftEventDisposition.include);
@@ -367,6 +383,13 @@ void main() {
       isEmpty,
     );
   });
+}
+
+Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pump();
 }
 
 FinancialDraft _draft({

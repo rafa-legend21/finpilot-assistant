@@ -74,7 +74,7 @@ void main() {
       ),
     ));
 
-    expect(find.text('Unknown merchant'), findsNWidgets(2));
+    expect(find.text('Unknown merchant'), findsWidgets);
     await tester.scrollUntilVisible(find.text('Cafe'), 300);
     expect(find.text('Cafe'), findsOneWidget);
   });

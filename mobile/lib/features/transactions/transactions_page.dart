@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
+import '../../core/finpilot_theme.dart';
 import 'transaction_models.dart';
 
 class TransactionsPage extends StatefulWidget {
@@ -98,46 +99,53 @@ class _TransactionsPageState extends State<TransactionsPage> {
                 ? _errorView()
                 : RefreshIndicator(
                     onRefresh: _reload,
-                    child: ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-                      children: [
-                        Text(
-                          'Confirmed expenses',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                            'Only expenses you reviewed and recorded appear here.'),
-                        if (_summary != null &&
-                            _summary!.totalsByCurrency.isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          _summaryCard(),
-                        ],
-                        const SizedBox(height: 18),
-                        if (_transactions.isEmpty)
-                          _emptyCard()
-                        else ...[
-                          Text(
-                              'Showing ${_transactions.length} of $_totalCount'),
-                          const SizedBox(height: 8),
-                          ..._transactions.map(_transactionCard),
-                          if (_moreError != null)
-                            Text(_moreError!,
-                                style: TextStyle(color: Colors.red.shade700)),
-                          if (_transactions.length < _totalCount)
-                            TextButton(
-                              onPressed: _loadingMore ? null : _loadMore,
-                              child:
-                                  Text(_loadingMore ? 'Loading…' : 'Load more'),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 760),
+                        child: ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+                          children: [
+                            Text('Confirmed expenses',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleLarge
+                                    ?.copyWith(fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 4),
+                            const Text(
+                                'Only expenses you reviewed and recorded appear here.'),
+                            if (_summary != null &&
+                                _summary!.totalsByCurrency.isNotEmpty) ...[
+                              const SizedBox(height: 16),
+                              _summaryCard(),
+                            ],
+                            const SizedBox(height: 18),
+                            if (_transactions.isEmpty)
+                              _emptyCard()
+                            else ...[
+                              Text(
+                                  'Showing ${_transactions.length} of $_totalCount'),
+                              const SizedBox(height: 8),
+                              ..._transactions.map(_transactionCard),
+                              if (_moreError != null)
+                                Text(_moreError!,
+                                    style:
+                                        TextStyle(color: Colors.red.shade700)),
+                              if (_transactions.length < _totalCount)
+                                TextButton(
+                                  onPressed: _loadingMore ? null : _loadMore,
+                                  child: Text(
+                                      _loadingMore ? 'Loading…' : 'Load more'),
+                                ),
+                            ],
+                            const SizedBox(height: 12),
+                            const Text(
+                              'This is a read-only view. Corrections are coming later.',
+                              textAlign: TextAlign.center,
                             ),
-                        ],
-                        const SizedBox(height: 12),
-                        const Text(
-                          'This is a read-only view. Corrections are coming later.',
-                          textAlign: TextAlign.center,
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
       );
@@ -146,6 +154,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
     final totals = _summary!.totalsByCurrency.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
     return Card(
+      color: FinPilotColors.mint,
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
