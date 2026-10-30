@@ -10,12 +10,14 @@ class ClarificationPage extends StatefulWidget {
     required this.api,
     required this.journal,
     required this.initialState,
+    this.responseLanguage = 'en',
     super.key,
   });
 
   final FinPilotApi api;
   final String journal;
   final ClarifyingFinancialDraft initialState;
+  final String responseLanguage;
 
   @override
   State<ClarificationPage> createState() => _ClarificationPageState();
@@ -26,6 +28,13 @@ class _ClarificationPageState extends State<ClarificationPage> {
   late ClarifyingFinancialDraft _state;
   bool _submitting = false;
   String? _error;
+
+  String _t(String zh, String en, String fr) =>
+      switch (widget.responseLanguage) {
+        'zh' => zh,
+        'fr' => fr,
+        _ => en,
+      };
 
   @override
   void initState() {
@@ -47,12 +56,12 @@ class _ClarificationPageState extends State<ClarificationPage> {
     final freeText = item.answer?['free_text'] as String?;
     if (freeText != null) return freeText;
     final optionKey = item.answer?['option_key'] as String?;
-    if (optionKey == null) return 'Answered';
+    if (optionKey == null) return _t('已回答', 'Answered', 'Répondu');
     return item.options
             .where((option) => option.optionKey == optionKey)
             .firstOrNull
             ?.label ??
-        'Answered';
+        _t('已回答', 'Answered', 'Répondu');
   }
 
   Future<void> _answer({String? optionKey, String? freeText}) async {
@@ -93,7 +102,11 @@ class _ClarificationPageState extends State<ClarificationPage> {
 
   void _reviewDraft() {
     Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
-      builder: (_) => DraftReviewPage(api: widget.api, initialDraft: _state.draft),
+      builder: (_) => DraftReviewPage(
+        api: widget.api,
+        initialDraft: _state.draft,
+        responseLanguage: widget.responseLanguage,
+      ),
     ));
   }
 
@@ -101,12 +114,16 @@ class _ClarificationPageState extends State<ClarificationPage> {
   Widget build(BuildContext context) {
     final openQuestion = _openQuestion;
     return Scaffold(
-      appBar: AppBar(title: const Text('A quick clarification')),
+      appBar: AppBar(
+          title: Text(
+              _t('请确认一下', 'A quick clarification', 'Une petite précision'))),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           ClarificationBubble(text: widget.journal, isUser: true),
-          ..._state.clarifications.where((item) => item.status == 'answered').expand(
+          ..._state.clarifications
+              .where((item) => item.status == 'answered')
+              .expand(
                 (item) => [
                   ClarificationBubble(
                     text: item.question,
@@ -144,9 +161,9 @@ class _ClarificationPageState extends State<ClarificationPage> {
               key: const Key('clarificationFreeText'),
               controller: _freeText,
               enabled: !_submitting,
-              decoration: const InputDecoration(
-                labelText: 'Something else',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: _t('其他情况', 'Something else', 'Autre réponse'),
+                border: const OutlineInputBorder(),
               ),
               minLines: 2,
               maxLines: 4,
@@ -159,20 +176,27 @@ class _ClarificationPageState extends State<ClarificationPage> {
                 onPressed: _submitting || _freeText.text.trim().isEmpty
                     ? null
                     : () => _answer(freeText: _freeText.text.trim()),
-                child: Text(_submitting ? 'Sending…' : 'Send answer'),
+                child: Text(_submitting
+                    ? _t('发送中…', 'Sending…', 'Envoi…')
+                    : _t('发送回答', 'Send answer', 'Envoyer la réponse')),
               ),
             ),
           ] else ...[
             const SizedBox(height: 20),
-            const Icon(Icons.check_circle_outline, size: 48, color: Colors.green),
+            const Icon(Icons.check_circle_outline,
+                size: 48, color: Colors.green),
             const SizedBox(height: 10),
-            const Text(
-              'Your draft is ready to review',
+            Text(
+              _t('草稿已准备好，请核对', 'Your draft is ready to review',
+                  'Votre brouillon est prêt à être vérifié'),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 14),
-            FilledButton(onPressed: _reviewDraft, child: const Text('Review draft')),
+            FilledButton(
+              onPressed: _reviewDraft,
+              child: Text(_t('核对草稿', 'Review draft', 'Vérifier le brouillon')),
+            ),
           ],
           if (_error != null)
             Padding(

@@ -1,11 +1,13 @@
 from functools import lru_cache
+from pathlib import Path
+from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEVELOPMENT_CORS_ORIGIN_REGEX = (
-    r"^https?://(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?$"
-)
+DEVELOPMENT_CORS_ORIGIN_REGEX = r"^https?://(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?$"
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = BACKEND_ROOT.parent
 
 
 class Settings(BaseSettings):
@@ -18,9 +20,12 @@ class Settings(BaseSettings):
 
     openai_api_key: str | None = None
     openai_model: str = "gpt-5"
+    openai_max_output_tokens: int = Field(default=8_000, ge=1_000, le=128_000)
+    openai_reasoning_effort: Literal["minimal", "low", "medium", "high"] = "minimal"
+    openai_text_verbosity: Literal["low", "medium", "high"] = "low"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(REPOSITORY_ROOT / ".env", BACKEND_ROOT / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

@@ -20,9 +20,9 @@ class Transaction(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
 
-    merchant: Mapped[str] = mapped_column(
+    merchant: Mapped[str | None] = mapped_column(
         String(150),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 

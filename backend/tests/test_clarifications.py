@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -8,6 +9,7 @@ from app.db.base import Base
 from app.schemas.financial_draft import (
     ClarificationAnswer,
     ClarificationAnswersRequest,
+    ClarificationIssueType,
     ClarificationOperation,
     ClarificationResolution,
     DraftEventDisposition,
@@ -33,6 +35,21 @@ from app.services.financial_draft_service import (
     FinancialDraftService,
     FinancialDraftValidationError,
 )
+
+
+@pytest.mark.parametrize(
+    ("language", "expected"),
+    [("zh", "我仍需还款"), ("en", "I still owe them"), ("fr", "Je dois encore la rembourser")],
+)
+def test_settlement_options_use_selected_language(language: str, expected: str) -> None:
+    options = ClarificationService._options(
+        ClarificationIssueType.PAYER_RESPONSIBILITY,
+        has_event=True,
+        language=language,
+    )
+    assert next(option for option in options if option["option_key"] == "repayment_due")[
+        "label"
+    ] == expected
 
 
 @pytest.fixture
@@ -200,8 +217,10 @@ def test_duplicate_semantic_questions_are_not_repeated(session: Session) -> None
     assert len(result.clarifications) == 1
 
 
+@pytest.mark.parametrize("language", ["en", "zh", "fr"])
 def test_third_party_payment_without_settlement_is_normalized_and_questioned(
     session: Session,
+    language: str,
 ) -> None:
     parsed = StoryParseResponse(
         summary="Coffee beans purchased for 18 CAD, paid by mother; user owes 0.",
@@ -248,33 +267,120 @@ def test_third_party_payment_without_settlement_is_normalized_and_questioned(
     )
 
     result = ClarificationService(session).create_from_parse(
-        "I bought coffee beans for 18 CAD, but my mother paid for them.", parsed
+        "I bought coffee beans for 18 CAD, but my mother paid for them.",
+        parsed,
+        response_language=language,
     )
 
     event = result.draft.events[0].event
     assert result.clarification_state == "awaiting_required"
-    assert "needs clarification" in result.draft.summary
+    if language == "en":
+        assert "needs clarification" in result.draft.summary
     assert len(result.clarifications) == 2
     assert result.clarifications[0].status == "superseded"
     clarification = result.clarifications[1]
     assert clarification.requirement == "required"
     assert clarification.issue_type == "payer_responsibility"
-    assert clarification.question == (
-        "Your mother paid 18 CAD for coffee beans. What happened afterward?"
-    )
-    assert clarification.reason == (
-        "This helps FinPilot determine whether the 18 CAD is actually your expense."
-    )
-    assert [(option.option_key, option.label) for option in clarification.options] == [
-        ("paid_by_other", "They paid for me — I owe nothing"),
-        ("repaid_by_user", "I already paid them back"),
-        ("repayment_due", "I still owe them"),
-    ]
+    if language == "en":
+        assert clarification.question == (
+            "Your mother paid 18 CAD for coffee beans. What happened afterward?"
+        )
+        assert clarification.reason == (
+            "This helps FinPilot determine whether the 18 CAD is actually your expense."
+        )
+        assert [(option.option_key, option.label) for option in clarification.options] == [
+            ("paid_by_other", "They paid for me — I owe nothing"),
+            ("repaid_by_user", "I already paid them back"),
+            ("repayment_due", "I still owe them"),
+        ]
+    else:
+        assert "18 CAD" in clarification.question
+        assert clarification.options[2].label == {
+            "zh": "我仍需还款",
+            "fr": "Je dois encore la rembourser",
+        }[language]
     assert all(option.option_key != "confirm_as_parsed" for option in clarification.options)
     assert event.settlement_status == SettlementStatus.UNRESOLVED
     assert event.user_net_amount == Decimal(18)
     assert event.needs_confirmation is True
     assert result.draft.original_snapshot["spending_events"][0]["user_net_amount"] == "0"
+
+
+@pytest.mark.parametrize(
+    ("share_role", "parsed_amount", "expected_amount"),
+    [
+        (AmountRole.USER_NET_EXPENSE, Decimal(0), Decimal(40)),
+        (AmountRole.USER_NET_EXPENSE, Decimal(40), Decimal(40)),
+        (AmountRole.UNKNOWN, Decimal(0), Decimal(0)),
+        (AmountRole.UNKNOWN, Decimal(80), Decimal(0)),
+    ],
+)
+def test_third_party_total_does_not_become_user_share(
+    session: Session,
+    share_role: AmountRole,
+    parsed_amount: Decimal,
+    expected_amount: Decimal,
+) -> None:
+    source = "A friend paid 80 CAD for dinner; my possible share was 40 CAD."
+    parsed = StoryParseResponse(
+        summary="The friend's payment needs clarification.",
+        spending_events=[
+            SpendingEvent(
+                title="Dinner",
+                category=ExpenseCategory.DINING,
+                event_date=date(2026, 8, 8),
+                payer_type=PayerType.OTHER_PERSON,
+                paid_by_name="friend",
+                user_net_amount=parsed_amount,
+                currency=CurrencyCode.CAD,
+                amount_mentions=[
+                    AmountMention(
+                        amount=Decimal(80),
+                        currency=CurrencyCode.CAD,
+                        role=AmountRole.PAID_BY_OTHER,
+                        counted_in_user_total=False,
+                        source_text="80 CAD",
+                        confidence=1,
+                        explanation="The friend paid the dinner total.",
+                    ),
+                    AmountMention(
+                        amount=Decimal(40),
+                        currency=CurrencyCode.CAD,
+                        role=share_role,
+                        counted_in_user_total=False,
+                        source_text="40 CAD",
+                        confidence=0.8,
+                        explanation="Possible user share.",
+                    ),
+                ],
+                source_text=source,
+                confidence=0.8,
+                needs_confirmation=True,
+            )
+        ],
+        total_user_expense=Decimal(0),
+        total_paid_by_others=Decimal(80),
+        total_saved_decisions=Decimal(0),
+        parser_confidence=0.8,
+    )
+    service = ClarificationService(session)
+    draft = service.create_from_parse(source, parsed)
+    event = draft.draft.events[0].event
+    question = next(item for item in draft.clarifications if item.status == "open")
+
+    assert event.user_net_amount == expected_amount
+    assert "paid 80 CAD" in question.question
+    if expected_amount == 0:
+        assert "Confirm your amount during review" in question.question
+    else:
+        assert "your share 40 CAD" in question.question
+
+    clarified = service.answer(
+        draft.draft.id,
+        answer_request(draft, question, "repaid_by_user"),
+    )
+    assert clarified.draft.events[0].event.user_net_amount == expected_amount
+    assert clarified.draft.events[0].event.event_date is None
 
 
 def test_mismatched_parser_settlement_question_is_superseded_for_canonical_event(
@@ -324,9 +430,7 @@ def test_mismatched_parser_settlement_question_is_superseded_for_canonical_event
     initial = service.create_from_parse("My mother paid for my coffee beans.", parsed)
 
     open_questions = [item for item in initial.clarifications if item.status == "open"]
-    superseded_questions = [
-        item for item in initial.clarifications if item.status == "superseded"
-    ]
+    superseded_questions = [item for item in initial.clarifications if item.status == "superseded"]
     assert len(open_questions) == 1
     assert len(superseded_questions) == 1
     canonical = open_questions[0]

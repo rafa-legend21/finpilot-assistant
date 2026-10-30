@@ -70,12 +70,12 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return const Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
+          children: [
             Text('Available this month'),
             SizedBox(height: 6),
             Text('\$1,284.60', style: TextStyle(fontSize: 34, fontWeight: FontWeight.w800)),
@@ -148,11 +148,11 @@ class _AllocationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return const Card(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.all(18),
         child: Column(
-          children: const [
+          children: [
             _AllocationRow(label: 'Fixed expenses', value: '\$825'),
             _AllocationRow(label: 'Investment', value: '\$500'),
             _AllocationRow(label: 'Essential spending', value: '\$475'),

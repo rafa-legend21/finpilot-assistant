@@ -5,6 +5,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('merchant is optional and unknown merchant stays blank',
+      (tester) async {
+    final draft = _draft();
+    await tester.pumpWidget(MaterialApp(
+      home: EventEditPage(
+        api: _RecordingApi(draft),
+        draft: draft,
+        draftEvent: draft.events.first,
+      ),
+    ));
+
+    expect(find.text('Merchant (optional)'), findsOneWidget);
+    expect(find.text('Leave blank if unknown'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('merchantField')))
+          .controller!
+          .text,
+      isEmpty,
+    );
+    expect(find.text('Unknown merchant'), findsNothing);
+  });
+
   testWidgets('pending is explicit and requires an include or exclude decision',
       (tester) async {
     final draft = _draft();
@@ -37,12 +60,115 @@ void main() {
 
     expect(api.savedEvent?.needsConfirmation, isTrue);
     expect(api.savedDisposition, DraftEventDisposition.exclude);
+    expect(api.savedEvent?.merchant, isNull);
+    expect(api.savedEvent?.eventDate, isNull);
+  });
+
+  testWidgets('included event rejects blank malformed and impossible dates',
+      (tester) async {
+    final draft =
+        _draft(settlementStatus: 'repaid_by_user', needsConfirmation: false);
+    final api = _RecordingApi(draft);
+    await tester.pumpWidget(MaterialApp(
+      home: EventEditPage(
+        api: api,
+        draft: draft,
+        draftEvent: draft.events.first,
+      ),
+    ));
+
+    await tester.tap(find.text('Include'));
+    await tester.pump();
+
+    expect(find.text('Date you repaid them (YYYY-MM-DD)'), findsOneWidget);
+
+    await tester.tap(find.text('Save review'));
+    await tester.pump();
+    expect(api.updateCalls, 0);
+    expect(
+      find.text(
+          'Enter a valid date in YYYY-MM-DD format to include this event.'),
+      findsOneWidget,
+    );
+
+    await tester.enterText(find.byKey(const Key('dateField')), '08/08/2026');
+    tester.testTextInput.hide();
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pump();
+    await tester.tap(find.text('Save review'));
+    await tester.pump();
+    expect(api.updateCalls, 0);
+
+    await tester.ensureVisible(find.byKey(const Key('dateField')));
+    await tester.enterText(find.byKey(const Key('dateField')), '2026-02-30');
+    tester.testTextInput.hide();
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pump();
+    await tester.tap(find.text('Save review'));
+    await tester.pump();
+    expect(api.updateCalls, 0);
+  });
+
+  testWidgets('zero repayment amount cannot be included', (tester) async {
+    final draft = _draft(
+      settlementStatus: 'repaid_by_user',
+      needsConfirmation: false,
+      eventDate: '2026-08-10',
+      amount: '0',
+    );
+    final api = _RecordingApi(draft);
+    await tester.pumpWidget(MaterialApp(
+      home: EventEditPage(
+        api: api,
+        draft: draft,
+        draftEvent: draft.events.first,
+      ),
+    ));
+
+    expect(find.text('Amount you repaid (CAD)'), findsOneWidget);
+    await tester.tap(find.text('Include'));
+    await tester.pump();
+    await tester.tap(find.text('Save review'));
+    await tester.pump();
+
+    expect(api.updateCalls, 0);
+    expect(
+      find.text('Enter the amount you actually paid to include this event.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('valid exact date and unknown merchant are sent without a label',
+      (tester) async {
+    final draft =
+        _draft(settlementStatus: 'repaid_by_user', needsConfirmation: false);
+    final api = _RecordingApi(draft);
+    await tester.pumpWidget(MaterialApp(
+      home: EventEditPage(
+        api: api,
+        draft: draft,
+        draftEvent: draft.events.first,
+      ),
+    ));
+
+    await tester.tap(find.text('Include'));
+    await tester.enterText(find.byKey(const Key('dateField')), '2026-08-08');
+    await tester.tap(find.text('Save review'));
+    await tester.pumpAndSettle();
+
+    expect(api.updateCalls, 1);
+    expect(api.savedDisposition, DraftEventDisposition.include);
+    expect(api.savedEvent?.eventDate, '2026-08-08');
+    expect(api.savedEvent?.merchant, isNull);
   });
 
   testWidgets('a completed repayment can be included after normal review',
       (tester) async {
-    final draft =
-        _draft(settlementStatus: 'repaid_by_user', needsConfirmation: false);
+    final draft = _draft(
+      settlementStatus: 'repaid_by_user',
+      needsConfirmation: false,
+      eventDate: '2026-08-08',
+    );
     final api = _RecordingApi(draft);
     await tester.pumpWidget(MaterialApp(
       home: EventEditPage(
@@ -125,6 +251,8 @@ void main() {
 FinancialDraft _draft({
   String settlementStatus = 'unresolved',
   bool needsConfirmation = true,
+  String? eventDate,
+  String amount = '18.00',
 }) =>
     FinancialDraft.fromJson({
       'id': 'draft-1',
@@ -141,12 +269,12 @@ FinancialDraft _draft({
             'title': 'Coffee beans',
             'category': 'grocery',
             'transaction_type': 'expense',
-            'event_date': null,
+            'event_date': eventDate,
             'merchant': null,
             'payer_type': 'other_person',
             'paid_by_name': 'mother',
             'settlement_status': settlementStatus,
-            'user_net_amount': '18.00',
+            'user_net_amount': amount,
             'currency': 'CAD',
             'amount_mentions': [],
             'quantities': [],
@@ -165,6 +293,7 @@ class _RecordingApi implements FinPilotApi {
   final FinancialDraft draft;
   SpendingEvent? savedEvent;
   DraftEventDisposition? savedDisposition;
+  int updateCalls = 0;
 
   @override
   Future<FinancialDraft> updateDraftEvent({
@@ -174,6 +303,7 @@ class _RecordingApi implements FinPilotApi {
     required DraftEventDisposition disposition,
     required SpendingEvent event,
   }) async {
+    updateCalls += 1;
     savedEvent = event;
     savedDisposition = disposition;
     return draft;

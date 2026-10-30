@@ -17,6 +17,7 @@ abstract interface class FinPilotApi {
     required String text,
     required CurrencyCode defaultCurrency,
     DateTime? referenceDate,
+    String? responseLanguage,
   });
   Future<ClarifyingFinancialDraft> getClarifications(String draftId);
   Future<ClarifyingFinancialDraft> answerClarification({
@@ -89,6 +90,7 @@ class HttpFinPilotApi implements FinPilotApi {
     required String text,
     required CurrencyCode defaultCurrency,
     DateTime? referenceDate,
+    String? responseLanguage,
   }) async =>
       ClarifyingFinancialDraft.fromJson(await _send(
         'POST',
@@ -97,6 +99,7 @@ class HttpFinPilotApi implements FinPilotApi {
           'text': text,
           'default_currency': defaultCurrency.name,
           if (referenceDate != null) 'reference_date': _date(referenceDate),
+          if (responseLanguage != null) 'response_language': responseLanguage,
         },
       ));
 
@@ -131,7 +134,8 @@ class HttpFinPilotApi implements FinPilotApi {
       ));
 
   @override
-  Future<FinancialDraft> getDraft(String draftId) async => FinancialDraft.fromJson(
+  Future<FinancialDraft> getDraft(String draftId) async =>
+      FinancialDraft.fromJson(
         await _send('GET', '/api/v1/financial-drafts/$draftId'),
       );
 
@@ -186,11 +190,12 @@ class HttpFinPilotApi implements FinPilotApi {
     try {
       response = switch (method) {
         'GET' => await _client.get(uri, headers: headers),
-        'PATCH' => await _client.patch(uri, headers: headers, body: jsonEncode(body)),
+        'PATCH' =>
+          await _client.patch(uri, headers: headers, body: jsonEncode(body)),
         _ => await _client.post(uri, headers: headers, body: jsonEncode(body)),
       };
     } catch (_) {
-      throw ApiException('Unable to reach FinPilot. Please try again.');
+      throw const ApiException('Unable to reach FinPilot. Please try again.');
     }
     final decoded = jsonDecode(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {

@@ -1,36 +1,41 @@
 # FinPilot Assistant
 
-FinPilot Assistant is a privacy-conscious personal budgeting application that will turn bank transaction emails into categorized spending records, monthly budgets, pay allocation guidance, and explainable financial insights.
+FinPilot is an AI personal finance companion. It helps users understand the stories behind their spending, review financial events before recording them, and make more deliberate money decisions. Financial accuracy takes priority over automation.
 
-## Milestone 1 status
+## Current status
 
-This repository contains the initial working architecture:
+The active application currently includes:
 
-- Flutter mobile app shell
-- FastAPI backend
-- PostgreSQL development database
-- Docker Compose local environment
-- Health endpoint and backend tests
-- Initial home dashboard
+- A Flutter journal, clarification, and event-review flow.
+- A FastAPI story parser and financial draft workflow. Confirmed expense events are saved with links to their source draft.
+- A PostgreSQL development database, explicit SQL migrations, Docker Compose, and automated tests.
+- A home screen with **example figures**, not live financial summaries.
+
+Transaction history, budget calculations, live insights, and impulse-spending support are planned. See the [roadmap](docs/roadmap.md).
 
 ## Repository layout
 
 ```text
 finpilot-assistant/
-├── backend/       FastAPI API and tests
-├── mobile/        Flutter application
-├── database/      Database bootstrap scripts
-├── docs/          Architecture and acceptance criteria
+├── backend/                    FastAPI API and tests
+├── mobile/                     Flutter application and widget tests
+├── database/                   Bootstrap SQL and numbered migrations
+├── docs/                       Product and engineering documentation
 └── docker-compose.yml
 ```
 
+Start with the [documentation guide](docs/README.md) to find the current architecture, data model, and product notes.
+
 ## Quick start: backend and database
 
-Requirements: Docker Desktop.
+Requirements: Docker Desktop and a local `.env` made from `.env.example`. Set `OPENAI_API_KEY` there to use story parsing; never commit it.
 
 ```bash
-docker compose up --build
+docker compose up --build -d
+docker compose run --rm api python scripts/run_migrations.py
 ```
+
+Migrations are an explicit step; `docker compose up` does not apply them.
 
 Then open:
 
@@ -53,14 +58,28 @@ Expected response:
 ```bash
 cd backend
 python -m venv .venv
-# Windows: .venv\\Scripts\\activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
 # macOS/Linux: source .venv/bin/activate
 python -m pip install -e ".[dev]"
 pytest
+ruff check .
 uvicorn app.main:app --reload
 ```
 
-SQLite is used automatically when `DATABASE_URL` is not provided.
+SQLite is the default when `DATABASE_URL` is not provided. It is useful for local development and tests; the Docker/PostgreSQL setup above is the supported path for the full database-backed flow. PostgreSQL migration integration tests require a separate `TEST_DATABASE_URL` and otherwise skip.
+
+## Verify Chinese, English, and French parsing
+
+The local parser is configured for `gpt-5`. Keep `OPENAI_API_KEY` only in the repository-root `.env`; the application loads it without printing it, and Git ignores the file.
+
+Run the synthetic multilingual acceptance check from the backend directory:
+
+```powershell
+cd backend
+..\.venv\Scripts\python.exe scripts\test_multilingual_acceptance.py
+```
+
+The check covers included prices, third-party payments, quantities, mixed emotions, and purchases the user decided not to make. Use `--case 3` or `--language zh` to limit a rerun. See the [acceptance record](docs/multilingual-acceptance.md) for the expected and latest verified results.
 
 ## Run the Flutter app
 
@@ -75,20 +94,13 @@ flutter run --dart-define=API_BASE_URL=http://localhost:8000
 
 For Android Emulator, the host computer is commonly reached through `http://10.0.2.2:8000`.
 
-## Security boundaries
+## Financial and privacy boundaries
 
 - Never request or store online-banking passwords.
-- Use OAuth for Gmail access.
-- Store only card/account last four digits.
-- Encrypt OAuth tokens and sensitive financial records.
-- Keep deterministic financial calculations separate from AI-generated explanations.
+- Only reviewed events are written to the transaction ledger.
+- Calculate financial totals in application code, not from AI explanations.
+- Add user accounts, access control, encryption for stored journals, and a retention policy before handling real users' data.
 
-## Next milestone
+## Next work
 
-Milestone 2 adds the transaction domain:
-
-- transaction database model
-- create, list, edit, and delete APIs
-- category management
-- monthly spending summaries
-- connected mobile transaction screens
+Priorities are financial-accuracy edge cases, a transaction read/correction flow, and a live overview based on known data. See the [roadmap](docs/roadmap.md) for the proposed sequence.

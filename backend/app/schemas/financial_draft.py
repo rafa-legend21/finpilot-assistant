@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -119,6 +119,7 @@ class JournalDraftCreateRequest(BaseModel):
     text: str = Field(min_length=1, max_length=10_000)
     default_currency: CurrencyCode = CurrencyCode.CAD
     reference_date: date | None = None
+    response_language: Literal["zh", "en", "fr"] | None = None
 
 
 class ClarificationOption(BaseModel):
