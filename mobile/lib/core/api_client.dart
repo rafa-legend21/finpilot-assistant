@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -12,6 +13,21 @@ abstract interface class FinPilotApi {
     int offset = 0,
   });
   Future<RecordedExpenseSummary> getTransactionSummary();
+  Future<RecordedTransaction> editTransaction({
+    required RecordedTransaction transaction,
+    required String reason,
+    required String amount,
+    required String currency,
+    required String category,
+    required String transactionDate,
+    String? merchant,
+    String? note,
+  });
+  Future<RecordedTransaction> voidTransaction({
+    required RecordedTransaction transaction,
+    required String reason,
+  });
+  Future<List<RecordedCorrection>> getTransactionHistory(int transactionId);
 
   Future<StoryParseResponse> parseStory({
     required String text,
@@ -61,12 +77,17 @@ class ApiException implements Exception {
 }
 
 class HttpFinPilotApi implements FinPilotApi {
-  HttpFinPilotApi({http.Client? client, String baseUrl = ApiConfig.baseUrl})
-      : _client = client ?? http.Client(),
-        _baseUrl = baseUrl;
+  HttpFinPilotApi({
+    http.Client? client,
+    String baseUrl = ApiConfig.baseUrl,
+    Duration requestTimeout = const Duration(seconds: 75),
+  })  : _client = client ?? http.Client(),
+        _baseUrl = baseUrl,
+        _requestTimeout = requestTimeout;
 
   final http.Client _client;
   final String _baseUrl;
+  final Duration _requestTimeout;
 
   @override
   Future<RecordedTransactionPage> getTransactions({
@@ -83,6 +104,57 @@ class HttpFinPilotApi implements FinPilotApi {
       RecordedExpenseSummary.fromJson(
         await _send('GET', '/api/v1/transactions/summary'),
       );
+
+  @override
+  Future<RecordedTransaction> editTransaction({
+    required RecordedTransaction transaction,
+    required String reason,
+    required String amount,
+    required String currency,
+    required String category,
+    required String transactionDate,
+    String? merchant,
+    String? note,
+  }) async =>
+      RecordedTransaction.fromJson(await _send(
+        'PATCH',
+        '/api/v1/transactions/${transaction.id}',
+        {
+          'expected_version': transaction.version,
+          'reason': reason,
+          'amount': amount,
+          'currency': currency,
+          'category': category,
+          'transaction_date': transactionDate,
+          'merchant': merchant,
+          'note': note,
+        },
+      ));
+
+  @override
+  Future<RecordedTransaction> voidTransaction({
+    required RecordedTransaction transaction,
+    required String reason,
+  }) async =>
+      RecordedTransaction.fromJson(await _send(
+        'POST',
+        '/api/v1/transactions/${transaction.id}/void',
+        {'expected_version': transaction.version, 'reason': reason},
+      ));
+
+  @override
+  Future<List<RecordedCorrection>> getTransactionHistory(
+      int transactionId) async {
+    final decoded = await _sendRaw(
+        'GET', '/api/v1/transactions/$transactionId/corrections');
+    if (decoded is! List<dynamic>) {
+      throw const ApiException('FinPilot returned an invalid response.');
+    }
+    return decoded
+        .map(
+            (item) => RecordedCorrection.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
 
   @override
   Future<StoryParseResponse> parseStory({
@@ -207,16 +279,31 @@ class HttpFinPilotApi implements FinPilotApi {
     String path, [
     Map<String, dynamic>? body,
   ]) async {
+    final decoded = await _sendRaw(method, path, body);
+    if (decoded is! Map<String, dynamic>) {
+      throw const ApiException('FinPilot returned an invalid response.');
+    }
+    return decoded;
+  }
+
+  Future<dynamic> _sendRaw(
+    String method,
+    String path, [
+    Map<String, dynamic>? body,
+  ]) async {
     final uri = Uri.parse('$_baseUrl$path');
     final headers = {'Content-Type': 'application/json'};
     late http.Response response;
     try {
-      response = switch (method) {
-        'GET' => await _client.get(uri, headers: headers),
-        'PATCH' =>
-          await _client.patch(uri, headers: headers, body: jsonEncode(body)),
-        _ => await _client.post(uri, headers: headers, body: jsonEncode(body)),
-      };
+      response = await (switch (method) {
+        'GET' => _client.get(uri, headers: headers),
+        'PATCH' => _client.patch(uri, headers: headers, body: jsonEncode(body)),
+        _ => _client.post(uri, headers: headers, body: jsonEncode(body)),
+      })
+          .timeout(_requestTimeout);
+    } on TimeoutException {
+      throw const ApiException(
+          'FinPilot took too long to respond. Check your connection and try again.');
     } catch (_) {
       throw const ApiException('Unable to reach FinPilot. Please try again.');
     }
@@ -227,9 +314,6 @@ class HttpFinPilotApi implements FinPilotApi {
         detail is String ? detail : 'Request failed (${response.statusCode}).',
         statusCode: response.statusCode,
       );
-    }
-    if (decoded is! Map<String, dynamic>) {
-      throw const ApiException('FinPilot returned an invalid response.');
     }
     return decoded;
   }

@@ -20,7 +20,7 @@ cd mobile
 flutter run -d edge --web-port 8080 --dart-define=API_BASE_URL=http://127.0.0.1:8000
 ```
 
-Open `http://localhost:8080` if Edge does not open automatically. In the app, choose **Assistant** to enter a story. The home-screen budget figures are examples and should not be judged as real totals. The browser's microphone support can differ from the iPhone's; start with typed stories and treat voice as an optional separate check.
+Open `http://localhost:8080` if Edge does not open automatically. In the app, choose **Assistant** to enter a story. Home shows confirmed, non-voided spending by currency, category, and recent date. Its check time is when the app last fetched these records; no bank feed is connected. The browser's microphone support can differ from the iPhone's; start with typed stories and treat voice as an optional separate check.
 
 ## Try three short journeys
 
@@ -28,7 +28,27 @@ Open `http://localhost:8080` if Edge does not open automatically. In the app, ch
 2. **Another payer.** Select Chinese. Enter: “妈妈替我付了18加元买咖啡豆。我没说是否需要还她。” Expect a clarification about repayment and no confirmed expense yet. Answer truthfully within this fictional scenario; if you choose that you already repaid her, review the repayment amount and exact repayment date before including it.
 3. **A purchase avoided.** Select French. Enter: “J'ai envisagé d'acheter des chaussures à 180 CAD, mais je ne les ai pas achetées.” Expect **0 CAD** spent. Open the event and choose the single **confirm no purchase** action; no payment fields or expense transaction should appear.
 
-After a confirmed expense, return to Home and open **Transactions**. The page shows only recorded expenses, their dates and merchants, and separate totals for each currency. Unconfirmed drafts and avoided purchases should not appear there. The page is read-only for now. This local test database keeps its records across runs until you deliberately remove it.
+After a confirmed expense, return to Home and open **Transactions**. The page shows only recorded expenses, their dates and merchants, and separate totals for each currency. Unconfirmed drafts and avoided purchases should not appear there. Tap a record to correct a detail with a reason, review its change history, or remove it from spending if someone else paid. Check that Home and Transactions totals update. This local test database keeps its records across runs until you deliberately remove it. The startup script adds correction columns to older simulated SQLite databases without deleting their records.
+
+## iPhone Safari preview from Windows
+
+This is a web preview for typed stories, not a native iPhone build. Connect the iPhone and Windows computer to the same Wi-Fi. In PowerShell, start the API with a new isolated test database:
+
+```powershell
+cd backend
+..\.venv\Scripts\python.exe scripts\run_simulated_test.py --database-name finpilot-v2.db
+```
+
+Build the web app using your computer's current LAN address, then serve the web app and API on the same LAN port:
+
+```powershell
+cd mobile
+flutter build web --dart-define=API_BASE_URL=http://<LAN-IP>:8080
+cd ..
+.\.venv\Scripts\python.exe scripts\serve_iphone_preview.py --host <LAN-IP> --port 8080
+```
+
+Open `http://<LAN-IP>:8080` on iPhone Safari. Check `http://<LAN-IP>:8080/api/v1/health` if a request fails. Run the API in an environment that can reach the configured model service. Use fictional test stories only: the local preview has no user accounts or authentication. Browser voice recognition on plain HTTP may be unavailable on iPhone; typed stories are the supported test here.
 
 ## Record what you notice
 

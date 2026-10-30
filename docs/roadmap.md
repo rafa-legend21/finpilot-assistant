@@ -7,14 +7,14 @@ This is a proposed order of work, not a release schedule. The [project README](.
 - Story parsing into structured financial drafts
 - Required clarification and user review before expense ledger writes
 - PostgreSQL migrations and automated backend and mobile tests
-- Read-only Flutter Transactions page and deterministic summaries by date, category, and currency
-- Flutter home screen with example figures
+- Correctable Flutter Transactions page with versioned change history
+- Deterministic summaries by date, category, and currency, shown on Home from confirmed records
 
 ## Next: trustworthy records and a real overview
 
 1. Tighten shared-payment and repayment amount/date handling, with regression cases from real wording.
-2. Add a reviewed transaction correction flow with a clear audit trail. Read-only history and deterministic summaries are in place.
-3. Replace home-screen example figures with sourced values, freshness labels, and clear unknown states.
+2. Validate the transaction correction flow and audit trail with simulated users and PostgreSQL migration tests.
+3. Refine the sourced Home overview with user feedback, including period filters and clearer freshness labels.
 4. Add user identity and data access boundaries before using real users' financial histories.
 
 ## After that: decisions and habits

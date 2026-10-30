@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:finpilot_assistant/core/api_client.dart';
 import 'package:finpilot_assistant/features/financial_review/models/financial_review_models.dart';
+import 'package:finpilot_assistant/features/transactions/transaction_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -52,6 +54,64 @@ void main() {
     expect(page.transactions.single.amount, '80.00');
     expect(page.transactions.single.merchant, isNull);
     expect(summary.totalsByCurrency, {'CAD': '80.00', 'USD': '25.00'});
+  });
+
+  test('corrections send the expected version and preserve monetary strings',
+      () async {
+    final requests = <http.Request>[];
+    final client = MockClient((request) async {
+      requests.add(request);
+      if (request.url.path.endsWith('/corrections')) {
+        return http.Response(
+            jsonEncode([
+              {
+                'action': 'edit',
+                'reason': 'Receipt corrected',
+                'before_state': {'amount': '18.00'},
+                'after_state': {'amount': '12.50'},
+                'created_at': '2026-10-30T12:00:00Z',
+              }
+            ]),
+            200);
+      }
+      return http.Response(
+          jsonEncode({
+            'id': 7,
+            'version': 2,
+            'amount': '12.50',
+            'currency': 'CAD',
+            'category': 'grocery',
+            'transaction_date': '2026-10-30',
+            'merchant': null,
+            'note': null,
+            'voided_at': null,
+          }),
+          200);
+    });
+    final api = HttpFinPilotApi(client: client, baseUrl: 'http://test');
+    const original = RecordedTransaction(
+        id: 7,
+        amount: '18.00',
+        currency: 'CAD',
+        category: 'dining',
+        transactionDate: '2026-10-29');
+
+    final edited = await api.editTransaction(
+        transaction: original,
+        reason: 'Receipt corrected',
+        amount: '12.50',
+        currency: 'CAD',
+        category: 'grocery',
+        transactionDate: '2026-10-30');
+    final history = await api.getTransactionHistory(7);
+    await api.voidTransaction(transaction: edited, reason: 'Paid by friend');
+
+    expect(requests.map((request) => request.method).toList(),
+        ['PATCH', 'GET', 'POST']);
+    expect(jsonDecode(requests[0].body), containsPair('expected_version', 1));
+    expect(jsonDecode(requests[0].body), containsPair('amount', '12.50'));
+    expect(history.single.beforeState['amount'], '18.00');
+    expect(jsonDecode(requests[2].body), containsPair('expected_version', 2));
   });
 
   test('parse request preserves monetary response values as strings', () async {
@@ -157,6 +217,28 @@ void main() {
               'Unable to reach FinPilot. Please try again.',
             ),
       ),
+    );
+  });
+
+  test('a stalled request reports a timeout instead of loading forever',
+      () async {
+    final stalled = Completer<http.Response>();
+    final api = HttpFinPilotApi(
+      client: MockClient((_) => stalled.future),
+      baseUrl: 'http://test',
+      requestTimeout: const Duration(milliseconds: 10),
+    );
+
+    await expectLater(
+      api.createDraftFromJournal(
+        text: 'I paid 5 CAD for coffee.',
+        defaultCurrency: CurrencyCode.CAD,
+      ),
+      throwsA(isA<ApiException>().having(
+        (error) => error.message,
+        'message',
+        contains('too long to respond'),
+      )),
     );
   });
 

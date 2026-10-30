@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/finpilot_theme.dart';
 import 'transaction_models.dart';
+import 'transaction_correction_page.dart';
 
 class TransactionsPage extends StatefulWidget {
   const TransactionsPage({required this.api, super.key});
@@ -140,9 +141,8 @@ class _TransactionsPageState extends State<TransactionsPage> {
                             ],
                             const SizedBox(height: 12),
                             const Text(
-                              'This is a read-only view. Corrections are coming later.',
-                              textAlign: TextAlign.center,
-                            ),
+                                'Tap a record to correct it or review its history.',
+                                textAlign: TextAlign.center),
                           ],
                         ),
                       ),
@@ -187,38 +187,48 @@ class _TransactionsPageState extends State<TransactionsPage> {
             : 'Recorded expense';
     return Card(
       key: Key('transaction-${transaction.id}'),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () async {
+            await Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => TransactionCorrectionPage(
+                  api: widget.api, transaction: transaction),
+            ));
+            if (mounted) _reload();
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text('${transaction.currency} ${transaction.amount}',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Text('${transaction.currency} ${transaction.amount}',
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                Text(
+                    '${transaction.transactionDate} · ${transaction.category}'),
+                if (merchant != null &&
+                    merchant.isNotEmpty &&
+                    note != null &&
+                    note.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(note),
+                ],
               ],
             ),
-            const SizedBox(height: 6),
-            Text('${transaction.transactionDate} · ${transaction.category}'),
-            if (merchant != null &&
-                merchant.isNotEmpty &&
-                note != null &&
-                note.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(note),
-            ],
-          ],
-        ),
-      ),
+          )),
     );
   }
 

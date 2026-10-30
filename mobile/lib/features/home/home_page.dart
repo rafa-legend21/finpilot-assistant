@@ -4,21 +4,60 @@ import '../../core/api_client.dart';
 import '../../core/finpilot_theme.dart';
 import '../financial_review/journal_entry_page.dart';
 import '../transactions/transactions_page.dart';
+import '../transactions/transaction_models.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({this.api, super.key});
 
   final FinPilotApi? api;
 
-  void _openAssistant(BuildContext context) =>
-      Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => JournalEntryPage(api: api ?? HttpFinPilotApi()),
-      ));
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
 
-  void _openTransactions(BuildContext context) =>
-      Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => TransactionsPage(api: api ?? HttpFinPilotApi()),
-      ));
+class _HomePageState extends State<HomePage> {
+  late final FinPilotApi _api = widget.api ?? HttpFinPilotApi();
+  RecordedExpenseSummary? _summary;
+  DateTime? _fetchedAt;
+  String? _summaryError;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshSummary();
+  }
+
+  Future<void> _refreshSummary() async {
+    try {
+      final summary = await _api.getTransactionSummary();
+      if (mounted) {
+        setState(() {
+          _summary = summary;
+          _fetchedAt = DateTime.now();
+          _summaryError = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+            () => _summaryError = 'Could not refresh spending. Tap to retry.');
+      }
+    }
+  }
+
+  Future<void> _openAssistant(BuildContext context) async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => JournalEntryPage(api: _api),
+    ));
+    _refreshSummary();
+  }
+
+  Future<void> _openTransactions(BuildContext context) async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => TransactionsPage(api: _api),
+    ));
+    _refreshSummary();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,6 +122,8 @@ class HomePage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 28),
+              _spendingOverview(theme),
+              const SizedBox(height: 28),
               Text('Your next step',
                   style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w800, color: FinPilotColors.ink)),
@@ -127,6 +168,105 @@ class HomePage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _spendingOverview(ThemeData theme) {
+    final summary = _summary;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Expanded(
+            child: Text('Confirmed spending',
+                style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800, color: FinPilotColors.ink))),
+        IconButton(
+            tooltip: 'Refresh spending summary',
+            onPressed: _refreshSummary,
+            icon: const Icon(Icons.refresh_rounded)),
+      ]),
+      const Text(
+          'From records you confirmed. Currencies are shown separately.'),
+      if (_fetchedAt != null)
+        Text(
+            'Checked at ${TimeOfDay.fromDateTime(_fetchedAt!).format(context)} · No bank feed connected',
+            style: theme.textTheme.bodySmall),
+      const SizedBox(height: 12),
+      if (summary == null && _summaryError == null)
+        const Card(
+            child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator())))
+      else if (_summaryError != null)
+        Card(
+            child: ListTile(
+                title: Text(_summaryError!),
+                trailing: const Icon(Icons.refresh_rounded),
+                onTap: _refreshSummary))
+      else if (summary!.totalsByCurrency.isEmpty)
+        const Card(
+            child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                    'No confirmed expenses yet. Your overview will fill in as you review records.')))
+      else
+        ..._currencyCards(summary),
+    ]);
+  }
+
+  List<Widget> _currencyCards(RecordedExpenseSummary summary) {
+    final currencies = summary.totalsByCurrency.keys.toList()..sort();
+    final today = DateTime.now();
+    final start = DateTime(today.year, today.month, today.day)
+        .subtract(const Duration(days: 6));
+    return currencies.map((currency) {
+      final categories = summary.byCategory
+          .where((entry) => entry.currency == currency)
+          .toList()
+        ..sort((a, b) => (double.tryParse(b.amount) ?? 0)
+            .compareTo(double.tryParse(a.amount) ?? 0));
+      final recent = summary.byDate.where((entry) {
+        final day = DateTime.tryParse(entry.date);
+        return entry.currency == currency &&
+            day != null &&
+            !day.isBefore(start);
+      }).toList();
+      return Card(
+          child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('$currency ${summary.totalsByCurrency[currency]}',
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w800)),
+          const Text('All confirmed dates'),
+          const Divider(height: 24),
+          const Text('By category',
+              style: TextStyle(fontWeight: FontWeight.w700)),
+          ...categories.map((entry) => Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(children: [
+                  Expanded(child: Text(entry.category)),
+                  Text('$currency ${entry.amount}',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                ]),
+              )),
+          const Divider(height: 24),
+          const Text('Last 7 days with recorded spending',
+              style: TextStyle(fontWeight: FontWeight.w700)),
+          if (recent.isEmpty)
+            const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('No confirmed spending in the last 7 days.')),
+          ...recent.map((entry) => Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(children: [
+                  Expanded(child: Text(entry.date)),
+                  Text('$currency ${entry.amount}'),
+                ]),
+              )),
+        ]),
+      ));
+    }).toList();
   }
 }
 
