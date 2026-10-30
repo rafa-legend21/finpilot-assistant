@@ -12,6 +12,7 @@ Start with the [project README](../README.md) for the active app and setup instr
 | [Roadmap](roadmap.md) | Current capabilities and proposed next stages |
 | [ADR-001](adr-001-transaction-types.md) | Transaction-type decision; implementation pending |
 | [Multilingual acceptance](multilingual-acceptance.md) | Chinese, English, and French financial and voice test cases |
+| [Simulated user test](simulated-user-test.md) | Hands-on Windows browser walkthrough with synthetic stories |
 | [Daily GitHub sync](daily-github-sync.md) | Local scheduled push and approval rules |
 
 The active application lives in `backend/`, `mobile/`, and `database/`. Completed work remains available through Git history instead of duplicate source snapshots.

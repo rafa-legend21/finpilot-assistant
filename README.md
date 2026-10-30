@@ -84,7 +84,7 @@ The check covers included prices, third-party payments, quantities, mixed emotio
 
 ## Run the Flutter app
 
-Requirements: Flutter SDK and an iOS Simulator, Android Emulator, or physical device.
+Requirements: Flutter SDK and an iOS Simulator, Android Emulator, physical device, or Edge for the browser preview.
 
 ```bash
 cd mobile
@@ -94,6 +94,8 @@ flutter run --dart-define=API_BASE_URL=http://localhost:8000
 ```
 
 For Android Emulator, the host computer is commonly reached through `http://10.0.2.2:8000`.
+
+On Windows, use the [simulated user test guide](docs/simulated-user-test.md) to run the same Flutter journal and review flow in Edge with an isolated local database.
 
 ## Review recorded expenses
 

@@ -27,3 +27,6 @@ Thumbs.db
 
 # Local approved-commit sync state
 .finpilot-sync/
+
+# Isolated local simulated-user session
+backend/.simulated-test/
