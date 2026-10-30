@@ -67,8 +67,12 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
     if (_confirming || _draft.status != DraftStatus.draft) return;
     final updated =
         await Navigator.of(context).push<FinancialDraft>(MaterialPageRoute(
-      builder: (_) =>
-          EventEditPage(api: widget.api, draft: _draft, draftEvent: event),
+      builder: (_) => EventEditPage(
+        api: widget.api,
+        draft: _draft,
+        draftEvent: event,
+        responseLanguage: widget.responseLanguage,
+      ),
     ));
     if (updated != null && mounted) setState(() => _draft = updated);
   }
@@ -260,8 +264,8 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
                     size: 64, color: Colors.green.shade700),
                 const SizedBox(height: 16),
                 Text(_t('草稿已确认', 'Draft confirmed', 'Brouillon confirmé'),
-                    style:
-                        const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
                 Text(_t(
                     '已保存 ${_confirmation!.transactionIds.length} 笔交易',

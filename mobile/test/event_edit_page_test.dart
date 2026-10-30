@@ -185,6 +185,34 @@ void main() {
     expect(controller.text, '2026-10-30');
   });
 
+  testWidgets('avoided purchase needs one confirmation and no payment fields',
+      (tester) async {
+    final draft = _avoidedDraft();
+    final api = _RecordingApi(draft);
+    await tester.pumpWidget(MaterialApp(
+      home: EventEditPage(
+        api: api,
+        draft: draft,
+        draftEvent: draft.events.first,
+        responseLanguage: 'zh',
+      ),
+    ));
+
+    expect(find.textContaining('你最后没有购买，因此没有付款，也不会记录支出。'), findsOneWidget);
+    expect(find.byKey(const Key('amountField')), findsNothing);
+    expect(find.text('Payment responsibility'), findsNothing);
+    expect(find.byKey(const Key('dateField')), findsNothing);
+    expect(find.text('Include'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('confirmNoPurchaseButton')));
+    await tester.pumpAndSettle();
+
+    expect(api.savedDisposition, DraftEventDisposition.exclude);
+    expect(api.savedEvent?.userNetAmount, '0');
+    expect(api.savedEvent?.amountMentions.single.role, 'saved_decision');
+    expect(api.savedEvent?.amountMentions.single.countedInUserTotal, isFalse);
+  });
+
   testWidgets('a completed repayment can be included after normal review',
       (tester) async {
     final draft = _draft(
@@ -304,6 +332,49 @@ FinancialDraft _draft({
             'source_text': 'Mother paid 18 CAD',
             'confidence': 0.8,
             'needs_confirmation': needsConfirmation,
+          },
+        }
+      ],
+      'totals_by_currency': {},
+    });
+
+FinancialDraft _avoidedDraft() => FinancialDraft.fromJson({
+      'id': 'avoided-draft',
+      'status': 'draft',
+      'version': 1,
+      'summary': 'I decided not to buy the shoes.',
+      'confirmation_questions': [],
+      'events': [
+        {
+          'id': 'avoided-event',
+          'position': 0,
+          'disposition': 'pending',
+          'event': {
+            'title': 'Shoes not bought',
+            'category': 'shopping',
+            'transaction_type': 'expense',
+            'event_date': null,
+            'merchant': null,
+            'payer_type': 'user',
+            'paid_by_name': null,
+            'settlement_status': 'not_applicable',
+            'user_net_amount': '0',
+            'currency': 'CAD',
+            'amount_mentions': [
+              {
+                'amount': '180',
+                'currency': 'CAD',
+                'role': 'saved_decision',
+                'counted_in_user_total': false,
+                'source_text': '180 CAD',
+                'confidence': 1.0,
+                'explanation': 'The shoes were not purchased.',
+              }
+            ],
+            'quantities': [],
+            'source_text': 'I considered 180 CAD shoes but did not buy them.',
+            'confidence': 1.0,
+            'needs_confirmation': false,
           },
         }
       ],

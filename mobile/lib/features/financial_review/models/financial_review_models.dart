@@ -122,6 +122,12 @@ class SpendingEvent {
   final double confidence;
   final bool needsConfirmation;
 
+  bool get isAvoidedPurchase =>
+      transactionType == 'expense' &&
+      num.tryParse(userNetAmount) == 0 &&
+      amountMentions.any((mention) => mention.role == 'saved_decision') &&
+      amountMentions.every((mention) => !mention.countedInUserTotal);
+
   SpendingEvent edited({
     required String amount,
     required String category,
@@ -131,8 +137,7 @@ class SpendingEvent {
   }) {
     final userBearsCost = payerType == 'user' ||
         payerType == 'shared' ||
-        (payerType == 'other_person' &&
-            settlementStatus == 'repaid_by_user');
+        (payerType == 'other_person' && settlementStatus == 'repaid_by_user');
     final canonicalAmount = userBearsCost ? amount : '0';
     final mentions = amountMentions
         .map((mention) => AmountMention(

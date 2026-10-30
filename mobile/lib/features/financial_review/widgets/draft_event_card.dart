@@ -22,6 +22,7 @@ class DraftEventCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final event = draftEvent.event;
+    final avoidedPurchase = event.isAvoidedPurchase;
     final excluded = draftEvent.disposition == DraftEventDisposition.exclude;
     final missingIncludedDate =
         draftEvent.disposition == DraftEventDisposition.include &&
@@ -131,7 +132,9 @@ class DraftEventCard extends StatelessWidget {
                       visualDensity: VisualDensity.compact,
                     ),
                   Chip(
-                    label: Text(_payerLabel(event)),
+                    label: Text(avoidedPurchase
+                        ? _t('未购买', 'Not purchased', 'Achat évité')
+                        : _payerLabel(event)),
                     visualDensity: VisualDensity.compact,
                   ),
                 ],

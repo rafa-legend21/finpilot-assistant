@@ -18,6 +18,20 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
+  testWidgets('avoided purchase card does not claim the user paid',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: DraftReviewPage(
+        api: _UnusedApi(),
+        initialDraft: _avoidedDraft(),
+      ),
+    ));
+
+    expect(find.text('Not purchased'), findsOneWidget);
+    expect(find.text('You paid'), findsNothing);
+    expect(find.text('Review needed'), findsOneWidget);
+  });
+
   testWidgets('uses recording language for included and excluded status chips',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
@@ -152,6 +166,49 @@ FinancialDraft _draft() => FinancialDraft.fromJson({
             'amount_mentions': [],
             'quantities': [],
             'source_text': 'Dinner was 80 dollars',
+            'confidence': 1.0,
+            'needs_confirmation': false,
+          },
+        }
+      ],
+      'totals_by_currency': {},
+    });
+
+FinancialDraft _avoidedDraft() => FinancialDraft.fromJson({
+      'id': 'avoided-draft',
+      'status': 'draft',
+      'version': 1,
+      'summary': 'I decided not to buy the shoes.',
+      'confirmation_questions': [],
+      'events': [
+        {
+          'id': 'avoided-event',
+          'position': 0,
+          'disposition': 'pending',
+          'event': {
+            'title': 'Shoes not bought',
+            'category': 'shopping',
+            'transaction_type': 'expense',
+            'event_date': null,
+            'merchant': null,
+            'payer_type': 'user',
+            'paid_by_name': null,
+            'settlement_status': 'not_applicable',
+            'user_net_amount': '0',
+            'currency': 'CAD',
+            'amount_mentions': [
+              {
+                'amount': '180',
+                'currency': 'CAD',
+                'role': 'saved_decision',
+                'counted_in_user_total': false,
+                'source_text': '180 CAD',
+                'confidence': 1.0,
+                'explanation': 'The shoes were not purchased.',
+              }
+            ],
+            'quantities': [],
+            'source_text': 'I considered 180 CAD shoes but did not buy them.',
             'confidence': 1.0,
             'needs_confirmation': false,
           },

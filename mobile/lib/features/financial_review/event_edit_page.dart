@@ -9,12 +9,14 @@ class EventEditPage extends StatefulWidget {
     required this.api,
     required this.draft,
     required this.draftEvent,
+    this.responseLanguage = 'en',
     super.key,
   });
 
   final FinPilotApi api;
   final FinancialDraft draft;
   final FinancialDraftEvent draftEvent;
+  final String responseLanguage;
 
   @override
   State<EventEditPage> createState() => _EventEditPageState();
@@ -30,6 +32,13 @@ class _EventEditPageState extends State<EventEditPage> {
   late int _version;
   bool _saving = false;
   String? _error;
+
+  String _t(String zh, String en, String fr) =>
+      switch (widget.responseLanguage) {
+        'zh' => zh,
+        'fr' => fr,
+        _ => en,
+      };
 
   @override
   void initState() {
@@ -54,12 +63,14 @@ class _EventEditPageState extends State<EventEditPage> {
 
   Future<void> _save() async {
     if (_saving) return;
+    final avoidedPurchase = widget.draftEvent.event.isAvoidedPurchase;
     final amount = _amount.text.trim();
-    if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(amount)) {
+    if (!avoidedPurchase && !RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(amount)) {
       setState(() => _error = 'Enter a valid non-negative amount.');
       return;
     }
-    var disposition = _disposition;
+    var disposition =
+        avoidedPurchase ? DraftEventDisposition.exclude : _disposition;
     if (_payer != 'user' &&
         _payer != 'shared' &&
         widget.draftEvent.event.settlementStatus != 'repaid_by_user' &&
@@ -79,13 +90,16 @@ class _EventEditPageState extends State<EventEditPage> {
           _error = 'Enter the amount you actually paid to include this event.');
       return;
     }
-    final edited = widget.draftEvent.event.edited(
-      amount: amount,
-      category: _category,
-      payerType: _payer,
-      merchant: _merchant.text.trim().isEmpty ? null : _merchant.text.trim(),
-      eventDate: eventDate.isEmpty ? null : eventDate,
-    );
+    final edited = avoidedPurchase
+        ? widget.draftEvent.event
+        : widget.draftEvent.event.edited(
+            amount: amount,
+            category: _category,
+            payerType: _payer,
+            merchant:
+                _merchant.text.trim().isEmpty ? null : _merchant.text.trim(),
+            eventDate: eventDate.isEmpty ? null : eventDate,
+          );
     setState(() {
       _saving = true;
       _error = null;
@@ -131,6 +145,9 @@ class _EventEditPageState extends State<EventEditPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.draftEvent.event.isAvoidedPurchase) {
+      return _buildAvoidedPurchase(context);
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Review event')),
       body: ListView(
@@ -249,4 +266,40 @@ class _EventEditPageState extends State<EventEditPage> {
       ),
     );
   }
+
+  Widget _buildAvoidedPurchase(BuildContext context) => Scaffold(
+        appBar: AppBar(
+            title: Text(_t('核对未购买事项', 'Review an avoided purchase',
+                'Vérifier un achat évité'))),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Text(widget.draftEvent.event.sourceText,
+                style: TextStyle(color: Colors.grey.shade700)),
+            const SizedBox(height: 20),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(_t(
+                    '你最后没有购买，因此没有付款，也不会记录支出。如果其实买了，请返回修改故事。',
+                    "You decided not to buy this. Nothing was paid or added to your expenses. If you did buy it, go back and correct your story.",
+                    "Vous avez décidé de ne pas acheter cet article. Aucune dépense ne sera enregistrée. Si vous l'avez acheté, revenez corriger votre récit.")),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 14),
+              Text(_error!, style: TextStyle(color: Colors.red.shade700)),
+            ],
+            const SizedBox(height: 24),
+            FilledButton(
+              key: const Key('confirmNoPurchaseButton'),
+              onPressed: _saving ? null : _save,
+              child: Text(_saving
+                  ? _t('保存中…', 'Saving…', 'Enregistrement…')
+                  : _t('确认未购买', 'Confirm no purchase',
+                      'Confirmer l’achat évité')),
+            ),
+          ],
+        ),
+      );
 }

@@ -26,7 +26,7 @@ Open `http://localhost:8080` if Edge does not open automatically. In the app, ch
 
 1. **Included price.** Select English. Enter: “I paid 80 CAD for dinner. The 33 CAD drink was included in that 80 CAD.” Expect one user expense of **80 CAD**, not 113. Review the event and its date before confirming.
 2. **Another payer.** Select Chinese. Enter: “妈妈替我付了18加元买咖啡豆。我没说是否需要还她。” Expect a clarification about repayment and no confirmed expense yet. Answer truthfully within this fictional scenario; if you choose that you already repaid her, review the repayment amount and exact repayment date before including it.
-3. **A purchase avoided.** Select French. Enter: “J'ai envisagé d'acheter des chaussures à 180 CAD, mais je ne les ai pas achetées.” Expect **0 CAD** spent and no expense transaction for the shoes.
+3. **A purchase avoided.** Select French. Enter: “J'ai envisagé d'acheter des chaussures à 180 CAD, mais je ne les ai pas achetées.” Expect **0 CAD** spent. Open the event and choose the single **confirm no purchase** action; no payment fields or expense transaction should appear.
 
 After a confirmed expense, `http://127.0.0.1:8000/api/v1/transactions` shows the recorded entry. `http://127.0.0.1:8000/api/v1/transactions/summary` shows its currency-separated total. Unconfirmed drafts should not appear there. This local test database keeps its records across runs until you deliberately remove it.
 
@@ -34,6 +34,6 @@ After a confirmed expense, `http://127.0.0.1:8000/api/v1/transactions` shows the
 
 For each journey, note whether the result was correct, where you hesitated, whether the wording felt reassuring, and what you expected the next button to do. A short note or screenshot of the unexpected screen is enough. Do not include personal financial details or an API key in feedback.
 
-Observed in the avoided-purchase journey: the review form still asks for **Payment responsibility** even though no payment happened. For now, select **Unknown**, keep **Your amount** at `0`, and choose **Exclude**. A future review form should make "not purchased" explicit and avoid asking who paid for an event that never happened.
+The avoided-purchase journey previously asked for **Payment responsibility** even though no payment happened. The review now recognizes an explicit saved decision with zero user expense and offers one confirmation action that excludes it from the ledger.
 
 Stop both terminals with `Ctrl+C` when finished.

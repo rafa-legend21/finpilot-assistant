@@ -377,6 +377,46 @@ def test_excluded_ambiguous_event_can_be_confirmed_without_ledger_write(
     assert confirmed.draft.status == "confirmed"
 
 
+def test_avoided_purchase_confirmation_never_writes_an_expense(session: Session) -> None:
+    event = SpendingEvent(
+        title="Shoes not bought",
+        category=ExpenseCategory.SHOPPING,
+        payer_type=PayerType.USER,
+        user_net_amount=Decimal(0),
+        currency=CurrencyCode.CAD,
+        amount_mentions=[
+            AmountMention(
+                amount=Decimal(180),
+                currency=CurrencyCode.CAD,
+                role=AmountRole.SAVED_DECISION,
+                counted_in_user_total=False,
+                source_text="180 CAD shoes",
+                confidence=1,
+                explanation="The user decided not to buy the shoes.",
+            )
+        ],
+        source_text="I considered buying 180 CAD shoes but did not buy them.",
+        confidence=1,
+    )
+    service = FinancialDraftService(session)
+    draft = service.create(create_request([event]))
+    reviewed = service.update_event(
+        draft.id,
+        draft.events[0].id,
+        FinancialDraftEventUpdate(
+            expected_version=draft.version,
+            disposition=DraftEventDisposition.EXCLUDE,
+            event=event,
+        ),
+    )
+
+    confirmed = service.confirm(reviewed.id, reviewed.version)
+
+    assert confirmed.transaction_ids == []
+    assert confirmed.draft.totals_by_currency == {}
+    assert session.scalar(select(func.count()).select_from(Transaction)) == 0
+
+
 @pytest.mark.parametrize(
     "transaction_type,payer_type",
     [
