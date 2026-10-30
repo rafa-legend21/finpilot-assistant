@@ -23,12 +23,12 @@ class StoryParserService:
         self.settings = get_settings()
 
         if not self.settings.openai_api_key:
-            raise StoryParserConfigurationError(
-                "OPENAI_API_KEY is not configured."
-            )
+            raise StoryParserConfigurationError("OPENAI_API_KEY is not configured.")
 
         self.client = client or OpenAI(
             api_key=self.settings.openai_api_key,
+            timeout=60.0,
+            max_retries=0,
         )
 
     def parse(self, request: StoryParseRequest) -> StoryParseResponse:
@@ -43,37 +43,29 @@ class StoryParserService:
                 text={"verbosity": self.settings.openai_text_verbosity},
             )
         except Exception as exc:
-            raise StoryParserOutputError(
-                f"OpenAI Story Parser request failed: {exc}"
-            ) from exc
+            raise StoryParserOutputError(f"OpenAI Story Parser request failed: {exc}") from exc
 
         if response.status == "incomplete":
             reason = getattr(response.incomplete_details, "reason", "unknown")
-            raise StoryParserOutputError(
-                f"The AI Story Parser response was incomplete: {reason}."
-            )
+            raise StoryParserOutputError(f"The AI Story Parser response was incomplete: {reason}.")
 
         parsed_result = response.output_parsed
 
         if parsed_result is None:
-            raise StoryParserOutputError(
-                "The AI returned no parsed Story Parser result."
-            )
+            raise StoryParserOutputError("The AI returned no parsed Story Parser result.")
 
         return parsed_result
 
     @staticmethod
     def _build_user_input(request: StoryParseRequest) -> str:
         reference_date = (
-            request.reference_date.isoformat()
-            if request.reference_date
-            else "not supplied"
+            request.reference_date.isoformat() if request.reference_date else "not supplied"
         )
 
         return f"""
 Default currency: {request.default_currency.value}
 Reference date: {reference_date}
-Response language: {request.response_language or 'same as journal entry'}
+Response language: {request.response_language or "same as journal entry"}
 
 Journal entry:
 {request.text}
