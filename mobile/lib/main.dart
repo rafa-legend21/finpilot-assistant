@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'core/finpilot_theme.dart';
 import 'features/home/home_page.dart';
 
 void main() {
@@ -14,11 +15,7 @@ class FinPilotApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'FinPilot Assistant',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF255A4A)),
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF6F7F5),
-      ),
+      theme: finPilotTheme(),
       home: const HomePage(),
     );
   }

@@ -6,14 +6,15 @@ void main() {
   testWidgets('renders the FinPilot home screen', (tester) async {
     await tester.pumpWidget(const FinPilotApp());
 
-    expect(find.text('FinPilot Assistant'), findsOneWidget);
-    expect(find.text('Budget categories'), findsOneWidget);
+    expect(find.text('FinPilot'), findsOneWidget);
+    expect(find.text('Your money, in your hands'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('Next pay allocation'),
+      find.text('How it works'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('Next pay allocation'), findsOneWidget);
+    expect(find.text('How it works'), findsOneWidget);
+    expect(find.text('\$1,284.60'), findsNothing);
   });
 
   testWidgets('Assistant navigation opens journal entry', (tester) async {
@@ -23,5 +24,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Tell FinPilot your story'), findsOneWidget);
+  });
+
+  testWidgets('home actions fit a narrow phone', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const FinPilotApp());
+    expect(find.text('Tell your story'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(
+      find.text('How it works'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(tester.takeException(), isNull);
   });
 }
