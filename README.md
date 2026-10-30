@@ -9,10 +9,10 @@ The active application currently includes:
 - A Flutter journal, clarification, and event-review flow.
 - A FastAPI story parser and financial draft workflow. Confirmed expense events are saved with links to their source draft.
 - A PostgreSQL development database, explicit SQL migrations, Docker Compose, and automated tests.
-- Read-only transaction history and deterministic expense summaries by date, category, and currency.
+- A read-only Flutter Transactions page backed by confirmed ledger entries, plus deterministic expense summaries by date, category, and currency.
 - A home screen with **example figures**, not live financial summaries.
 
-Transaction correction, budget calculations, live insights, and impulse-spending support are planned. See the [roadmap](docs/roadmap.md).
+Transaction correction, budget calculations, live home-screen insights, and impulse-spending support are planned. See the [roadmap](docs/roadmap.md).
 
 ## Repository layout
 

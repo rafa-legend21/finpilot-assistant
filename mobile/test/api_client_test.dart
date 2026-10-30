@@ -7,6 +7,53 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test('transaction queries preserve amounts and use read-only endpoints',
+      () async {
+    final paths = <String>[];
+    final client = MockClient((request) async {
+      paths.add(request.url.toString());
+      expect(request.method, 'GET');
+      if (request.url.path.endsWith('/summary')) {
+        return http.Response(
+            jsonEncode({
+              'totals_by_currency': {'CAD': '80.00', 'USD': '25.00'},
+              'by_date': [],
+              'by_category': [],
+            }),
+            200);
+      }
+      return http.Response(
+          jsonEncode({
+            'transactions': [
+              {
+                'id': 7,
+                'merchant': null,
+                'amount': '80.00',
+                'currency': 'CAD',
+                'category': 'dining',
+                'transaction_date': '2026-10-30',
+                'note': 'Dinner',
+              }
+            ],
+            'total_count': 1,
+          }),
+          200);
+    });
+    final api = HttpFinPilotApi(client: client, baseUrl: 'http://test');
+
+    final page = await api.getTransactions(limit: 20, offset: 40);
+    final summary = await api.getTransactionSummary();
+
+    expect(paths, [
+      'http://test/api/v1/transactions?limit=20&offset=40',
+      'http://test/api/v1/transactions/summary',
+    ]);
+    expect(page.totalCount, 1);
+    expect(page.transactions.single.amount, '80.00');
+    expect(page.transactions.single.merchant, isNull);
+    expect(summary.totalsByCurrency, {'CAD': '80.00', 'USD': '25.00'});
+  });
+
   test('parse request preserves monetary response values as strings', () async {
     late Map<String, dynamic> requestBody;
     final client = MockClient((request) async {

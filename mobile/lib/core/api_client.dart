@@ -3,9 +3,16 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../features/financial_review/models/financial_review_models.dart';
+import '../features/transactions/transaction_models.dart';
 import 'api_config.dart';
 
 abstract interface class FinPilotApi {
+  Future<RecordedTransactionPage> getTransactions({
+    int limit = 50,
+    int offset = 0,
+  });
+  Future<RecordedExpenseSummary> getTransactionSummary();
+
   Future<StoryParseResponse> parseStory({
     required String text,
     required CurrencyCode defaultCurrency,
@@ -60,6 +67,22 @@ class HttpFinPilotApi implements FinPilotApi {
 
   final http.Client _client;
   final String _baseUrl;
+
+  @override
+  Future<RecordedTransactionPage> getTransactions({
+    int limit = 50,
+    int offset = 0,
+  }) async =>
+      RecordedTransactionPage.fromJson(await _send(
+        'GET',
+        '/api/v1/transactions?limit=$limit&offset=$offset',
+      ));
+
+  @override
+  Future<RecordedExpenseSummary> getTransactionSummary() async =>
+      RecordedExpenseSummary.fromJson(
+        await _send('GET', '/api/v1/transactions/summary'),
+      );
 
   @override
   Future<StoryParseResponse> parseStory({

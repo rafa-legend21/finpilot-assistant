@@ -28,7 +28,7 @@ Open `http://localhost:8080` if Edge does not open automatically. In the app, ch
 2. **Another payer.** Select Chinese. Enter: “妈妈替我付了18加元买咖啡豆。我没说是否需要还她。” Expect a clarification about repayment and no confirmed expense yet. Answer truthfully within this fictional scenario; if you choose that you already repaid her, review the repayment amount and exact repayment date before including it.
 3. **A purchase avoided.** Select French. Enter: “J'ai envisagé d'acheter des chaussures à 180 CAD, mais je ne les ai pas achetées.” Expect **0 CAD** spent. Open the event and choose the single **confirm no purchase** action; no payment fields or expense transaction should appear.
 
-After a confirmed expense, `http://127.0.0.1:8000/api/v1/transactions` shows the recorded entry. `http://127.0.0.1:8000/api/v1/transactions/summary` shows its currency-separated total. Unconfirmed drafts should not appear there. This local test database keeps its records across runs until you deliberately remove it.
+After a confirmed expense, return to Home and open **Transactions**. The page shows only recorded expenses, their dates and merchants, and separate totals for each currency. Unconfirmed drafts and avoided purchases should not appear there. The page is read-only for now. This local test database keeps its records across runs until you deliberately remove it.
 
 ## Record what you notice
 

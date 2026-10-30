@@ -7,7 +7,7 @@ This is a proposed order of work, not a release schedule. The [project README](.
 - Story parsing into structured financial drafts
 - Required clarification and user review before expense ledger writes
 - PostgreSQL migrations and automated backend and mobile tests
-- Read-only transaction history and deterministic summaries by date, category, and currency
+- Read-only Flutter Transactions page and deterministic summaries by date, category, and currency
 - Flutter home screen with example figures
 
 ## Next: trustworthy records and a real overview
