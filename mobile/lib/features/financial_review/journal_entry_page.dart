@@ -141,22 +141,35 @@ class _JournalEntryPageState extends State<JournalEntryPage> {
         responseLanguage: _language.name,
       );
       if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute<void>(
+      var didConfirm = false;
+      final confirmed =
+          await Navigator.of(context).push<bool>(MaterialPageRoute(
         builder: (_) => result.clarificationState == 'awaiting_required'
             ? ClarificationPage(
                 api: widget.api,
                 journal: text,
                 initialState: result,
                 responseLanguage: _language.name,
+                onConfirmed: () => didConfirm = true,
               )
             : DraftReviewPage(
                 api: widget.api,
                 initialDraft: result.draft,
                 responseLanguage: _language.name,
+                onConfirmed: () => didConfirm = true,
               ),
       ));
+      if ((confirmed == true || didConfirm) && mounted) {
+        _controller.clear();
+        _voiceBaseText = '';
+      }
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() => _error = _language == _VoiceLanguage.en
+            ? error.message
+            : _t('无法准备草稿，请重试。', error.message,
+                'Impossible de préparer votre brouillon. Veuillez réessayer.'));
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _error = _t(

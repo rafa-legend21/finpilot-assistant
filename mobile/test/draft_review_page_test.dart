@@ -5,6 +5,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('French draft card shows translated category', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: DraftReviewPage(
+        api: _UnusedApi(),
+        initialDraft: _draft(),
+        responseLanguage: 'fr',
+      ),
+    ));
+
+    expect(find.text('Restauration'), findsOneWidget);
+    expect(find.text('dining'), findsNothing);
+  });
+
   testWidgets('pending events block confirmation and show review state',
       (tester) async {
     await tester.pumpWidget(MaterialApp(

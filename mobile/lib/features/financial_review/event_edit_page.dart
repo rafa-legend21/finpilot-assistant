@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
+import 'category_labels.dart';
 import 'iso_date_input_formatter.dart';
 import 'models/financial_review_models.dart';
 
@@ -66,7 +67,10 @@ class _EventEditPageState extends State<EventEditPage> {
     final avoidedPurchase = widget.draftEvent.event.isAvoidedPurchase;
     final amount = _amount.text.trim();
     if (!avoidedPurchase && !RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(amount)) {
-      setState(() => _error = 'Enter a valid non-negative amount.');
+      setState(() => _error = _t(
+          '请输入有效的非负金额。',
+          'Enter a valid non-negative amount.',
+          'Saisissez un montant valide supérieur ou égal à zéro.'));
       return;
     }
     var disposition =
@@ -80,14 +84,18 @@ class _EventEditPageState extends State<EventEditPage> {
     final eventDate = _date.text.trim();
     if (disposition == DraftEventDisposition.include &&
         !_isValidExactDate(eventDate)) {
-      setState(() => _error =
-          'Enter a valid date in YYYY-MM-DD format to include this event.');
+      setState(() => _error = _t(
+          '要记录此事件，请输入 YYYY-MM-DD 格式的有效日期。',
+          'Enter a valid date in YYYY-MM-DD format to include this event.',
+          'Pour inclure cet événement, saisissez une date valide au format AAAA-MM-JJ.'));
       return;
     }
     if (disposition == DraftEventDisposition.include &&
         num.parse(amount) <= 0) {
-      setState(() =>
-          _error = 'Enter the amount you actually paid to include this event.');
+      setState(() => _error = _t(
+          '要记录此事件，请输入你实际支付的金额。',
+          'Enter the amount you actually paid to include this event.',
+          'Pour inclure cet événement, saisissez le montant que vous avez réellement payé.'));
       return;
     }
     final edited = avoidedPurchase
@@ -124,8 +132,14 @@ class _EventEditPageState extends State<EventEditPage> {
       }
       if (mounted) {
         setState(() => _error = error.statusCode == 409
-            ? '${error.message} Latest draft loaded; review and save again.'
-            : error.message);
+            ? _t(
+                '草稿已更新，请核对后重新保存。',
+                'Latest draft loaded; review and save again.',
+                'Le brouillon a été actualisé. Vérifiez-le, puis enregistrez à nouveau.')
+            : widget.responseLanguage == 'en'
+                ? error.message
+                : _t('无法保存核对结果，请重试。', error.message,
+                    'Impossible d’enregistrer la vérification. Réessayez.'));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -149,7 +163,8 @@ class _EventEditPageState extends State<EventEditPage> {
       return _buildAvoidedPurchase(context);
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Review event')),
+      appBar: AppBar(
+          title: Text(_t('核对事件', 'Review event', 'Vérifier l’événement'))),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -163,18 +178,21 @@ class _EventEditPageState extends State<EventEditPage> {
             decoration: InputDecoration(
               labelText: widget.draftEvent.event.settlementStatus ==
                       'repaid_by_user'
-                  ? 'Amount you repaid (${widget.draftEvent.event.currency})'
-                  : 'Your amount (${widget.draftEvent.event.currency})',
+                  ? '${_t('你偿还的金额', 'Amount you repaid', 'Montant remboursé')} (${widget.draftEvent.event.currency})'
+                  : '${_t('你的支出金额', 'Your amount', 'Votre montant')} (${widget.draftEvent.event.currency})',
               border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _category,
-            decoration: const InputDecoration(labelText: 'Category'),
+            decoration:
+                InputDecoration(labelText: _t('类别', 'Category', 'Catégorie')),
             items: expenseCategories
-                .map((category) =>
-                    DropdownMenuItem(value: category, child: Text(category)))
+                .map((category) => DropdownMenuItem(
+                    value: category,
+                    child:
+                        Text(categoryLabel(category, widget.responseLanguage))))
                 .toList(),
             onChanged:
                 _saving ? null : (value) => setState(() => _category = value!),
@@ -182,14 +200,16 @@ class _EventEditPageState extends State<EventEditPage> {
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _payer,
-            decoration:
-                const InputDecoration(labelText: 'Payment responsibility'),
-            items: const {
-              'user': 'You paid',
-              'shared': 'Shared',
-              'other_person': 'Someone else paid',
-              'employer': 'Employer paid',
-              'unknown': 'Unknown',
+            decoration: InputDecoration(
+                labelText: _t('付款责任', 'Payment responsibility',
+                    'Responsabilité du paiement')),
+            items: {
+              'user': _t('你已付款', 'You paid', 'Vous avez payé'),
+              'shared': _t('共同承担', 'Shared', 'Partagé'),
+              'other_person':
+                  _t('他人付款', 'Someone else paid', 'Une autre personne a payé'),
+              'employer': _t('雇主付款', 'Employer paid', 'L’employeur a payé'),
+              'unknown': _t('未知', 'Unknown', 'Inconnu'),
             }
                 .entries
                 .map((entry) => DropdownMenuItem(
@@ -202,9 +222,11 @@ class _EventEditPageState extends State<EventEditPage> {
           TextField(
             key: const Key('merchantField'),
             controller: _merchant,
-            decoration: const InputDecoration(
-              labelText: 'Merchant (optional)',
-              helperText: 'Leave blank if unknown',
+            decoration: InputDecoration(
+              labelText: _t(
+                  '商家（可选）', 'Merchant (optional)', 'Commerçant (facultatif)'),
+              helperText: _t('不知道可留空', 'Leave blank if unknown',
+                  'Laissez vide si vous ne savez pas'),
             ),
           ),
           const SizedBox(height: 12),
@@ -216,22 +238,28 @@ class _EventEditPageState extends State<EventEditPage> {
             decoration: InputDecoration(
               labelText:
                   widget.draftEvent.event.settlementStatus == 'repaid_by_user'
-                      ? 'Date you repaid them (YYYY-MM-DD)'
-                      : 'Date (YYYY-MM-DD)',
+                      ? _t(
+                          '偿还日期 (YYYY-MM-DD)',
+                          'Date you repaid them (YYYY-MM-DD)',
+                          'Date du remboursement (AAAA-MM-JJ)')
+                      : _t('日期 (YYYY-MM-DD)', 'Date (YYYY-MM-DD)',
+                          'Date (AAAA-MM-JJ)'),
             ),
           ),
           const SizedBox(height: 16),
           SegmentedButton<DraftEventDisposition>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: DraftEventDisposition.pending,
-                label: Text('Pending'),
+                label: Text(_t('待核对', 'Pending', 'En attente')),
                 enabled: false,
               ),
               ButtonSegment(
-                  value: DraftEventDisposition.include, label: Text('Include')),
+                  value: DraftEventDisposition.include,
+                  label: Text(_t('记录', 'Include', 'Inclure'))),
               ButtonSegment(
-                  value: DraftEventDisposition.exclude, label: Text('Exclude')),
+                  value: DraftEventDisposition.exclude,
+                  label: Text(_t('不记录', 'Exclude', 'Exclure'))),
             ],
             selected: {_disposition},
             onSelectionChanged: _saving
@@ -239,10 +267,12 @@ class _EventEditPageState extends State<EventEditPage> {
                 : (values) => setState(() => _disposition = values.first),
           ),
           if (_disposition == DraftEventDisposition.pending)
-            const Padding(
-              padding: EdgeInsets.only(top: 10),
-              child:
-                  Text('Choose Include or Exclude before saving this review.'),
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(_t(
+                  '保存前请选择记录或不记录。',
+                  'Choose Include or Exclude before saving this review.',
+                  'Choisissez Inclure ou Exclure avant d’enregistrer.')),
             ),
           if (_error != null) ...[
             const SizedBox(height: 14),
@@ -255,11 +285,16 @@ class _EventEditPageState extends State<EventEditPage> {
             onPressed: _saving || _disposition == DraftEventDisposition.pending
                 ? null
                 : _save,
-            child: Text(_saving ? 'Saving…' : 'Save review'),
+            child: Text(_saving
+                ? _t('保存中…', 'Saving…', 'Enregistrement…')
+                : _t('保存核对结果', 'Save review', 'Enregistrer la vérification')),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'FinPilot will validate this event again on the server before confirmation.',
+          Text(
+            _t(
+                '确认草稿前，FinPilot 会再次验证此事件。',
+                'FinPilot will validate this event again on the server before confirmation.',
+                'FinPilot vérifiera à nouveau cet événement avant la confirmation.'),
             textAlign: TextAlign.center,
           ),
         ],

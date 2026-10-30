@@ -11,6 +11,7 @@ class ClarificationPage extends StatefulWidget {
     required this.journal,
     required this.initialState,
     this.responseLanguage = 'en',
+    this.onConfirmed,
     super.key,
   });
 
@@ -18,6 +19,7 @@ class ClarificationPage extends StatefulWidget {
   final String journal;
   final ClarifyingFinancialDraft initialState;
   final String responseLanguage;
+  final VoidCallback? onConfirmed;
 
   @override
   State<ClarificationPage> createState() => _ClarificationPageState();
@@ -94,20 +96,30 @@ class _ClarificationPageState extends State<ClarificationPage> {
           // Preserve the unsent free-text response when refresh fails.
         }
       }
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() => _error = widget.responseLanguage == 'en'
+            ? error.message
+            : error.statusCode == 409
+                ? _t('问题已更新，请核对后重试。', error.message,
+                    'La question a été actualisée. Vérifiez-la, puis réessayez.')
+                : _t('无法发送回答，请重试。', error.message,
+                    'Impossible d’envoyer la réponse. Réessayez.'));
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  void _reviewDraft() {
-    Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
+  Future<void> _reviewDraft() async {
+    final confirmed = await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => DraftReviewPage(
         api: widget.api,
         initialDraft: _state.draft,
         responseLanguage: widget.responseLanguage,
+        onConfirmed: widget.onConfirmed,
       ),
     ));
+    if (mounted) Navigator.of(context).pop(confirmed == true);
   }
 
   @override

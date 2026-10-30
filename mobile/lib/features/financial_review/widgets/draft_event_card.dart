@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../category_labels.dart';
 import '../models/financial_review_models.dart';
 
 class DraftEventCard extends StatelessWidget {
@@ -118,7 +119,8 @@ class DraftEventCard extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                   ),
                   Chip(
-                      label: Text(event.category),
+                      label:
+                          Text(categoryLabel(event.category, responseLanguage)),
                       visualDensity: VisualDensity.compact),
                   Chip(
                     label: Text(_merchantLabel(event)),

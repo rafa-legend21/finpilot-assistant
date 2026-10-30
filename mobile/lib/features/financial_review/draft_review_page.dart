@@ -10,10 +10,12 @@ class DraftReviewPage extends StatefulWidget {
       {required this.api,
       required this.initialDraft,
       this.responseLanguage = 'en',
+      this.onConfirmed,
       super.key});
   final FinPilotApi api;
   final FinancialDraft initialDraft;
   final String responseLanguage;
+  final VoidCallback? onConfirmed;
 
   @override
   State<DraftReviewPage> createState() => _DraftReviewPageState();
@@ -89,6 +91,7 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
         expectedVersion: _draft.version,
       );
       if (mounted) {
+        widget.onConfirmed?.call();
         setState(() {
           _confirmation = result;
           _draft = result.draft;
@@ -103,7 +106,15 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
           // Keep the current review visible if refresh fails.
         }
       }
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() => _error = widget.responseLanguage == 'en'
+            ? error.message
+            : error.statusCode == 409
+                ? _t('草稿已更新，请核对后重试。', error.message,
+                    'Le brouillon a été actualisé. Vérifiez-le, puis réessayez.')
+                : _t('无法确认草稿，请重试。', error.message,
+                    'Impossible de confirmer le brouillon. Réessayez.'));
+      }
     } finally {
       if (mounted) setState(() => _confirming = false);
     }
@@ -125,7 +136,15 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
           // Keep the current review visible if refresh fails.
         }
       }
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() => _error = widget.responseLanguage == 'en'
+            ? error.message
+            : error.statusCode == 409
+                ? _t('草稿已更新，请核对后重试。', error.message,
+                    'Le brouillon a été actualisé. Vérifiez-le, puis réessayez.')
+                : _t('无法取消草稿，请重试。', error.message,
+                    'Impossible d’annuler le brouillon. Réessayez.'));
+      }
     } finally {
       if (mounted) setState(() => _confirming = false);
     }
@@ -273,7 +292,7 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
                     '${_confirmation!.transactionIds.length} transaction(s) enregistrée(s)')),
                 const SizedBox(height: 20),
                 FilledButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => Navigator.of(context).pop(true),
                   child: Text(_t('完成', 'Done', 'Terminé')),
                 ),
               ],

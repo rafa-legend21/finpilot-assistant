@@ -6,6 +6,67 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('confirmed draft clears the journal on return', (tester) async {
+    await tester
+        .pumpWidget(MaterialApp(home: JournalEntryPage(api: _FlowApi())));
+    await _submitJournal(tester);
+
+    await tester.ensureVisible(find.byKey(const Key('confirmDraftButton')));
+    await tester.tap(find.byKey(const Key('confirmDraftButton')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    expect(_journalText(tester), isEmpty);
+  });
+
+  testWidgets('back from confirmed screen also clears the journal',
+      (tester) async {
+    await tester
+        .pumpWidget(MaterialApp(home: JournalEntryPage(api: _FlowApi())));
+    await _submitJournal(tester);
+
+    await tester.ensureVisible(find.byKey(const Key('confirmDraftButton')));
+    await tester.tap(find.byKey(const Key('confirmDraftButton')));
+    await tester.pumpAndSettle();
+    expect(find.text('Draft confirmed'), findsWidgets);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(_journalText(tester), isEmpty);
+  });
+
+  testWidgets('leaving review without confirmation preserves the journal',
+      (tester) async {
+    await tester
+        .pumpWidget(MaterialApp(home: JournalEntryPage(api: _FlowApi())));
+    await _submitJournal(tester);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(_journalText(tester), 'I decided not to buy the shoes');
+  });
+
+  testWidgets('confirmation after clarification also clears the journal',
+      (tester) async {
+    await tester.pumpWidget(
+        MaterialApp(home: JournalEntryPage(api: _FlowApi(clarify: true))));
+    await _submitJournal(tester);
+
+    await tester.tap(find.text('I did not buy them'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Review draft'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('confirmDraftButton')));
+    await tester.tap(find.byKey(const Key('confirmDraftButton')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    expect(_journalText(tester), isEmpty);
+  });
+
   testWidgets('journal text survives a recoverable API error', (tester) async {
     await tester
         .pumpWidget(MaterialApp(home: JournalEntryPage(api: _FailingApi())));
@@ -145,6 +206,118 @@ void main() {
         'I paid 80 CAD');
   });
 }
+
+Future<void> _submitJournal(WidgetTester tester) async {
+  await tester.enterText(
+      find.byKey(const Key('journalField')), 'I decided not to buy the shoes');
+  await tester.pump();
+  await tester.drag(find.byType(ListView), const Offset(0, -700));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('journalSubmit')));
+  await tester.pumpAndSettle();
+}
+
+String _journalText(WidgetTester tester) => tester
+    .widget<TextField>(find.byKey(const Key('journalField')))
+    .controller!
+    .text;
+
+class _FlowApi implements FinPilotApi {
+  _FlowApi({this.clarify = false});
+
+  final bool clarify;
+
+  @override
+  Future<ClarifyingFinancialDraft> createDraftFromJournal({
+    required String text,
+    required CurrencyCode defaultCurrency,
+    DateTime? referenceDate,
+    String? responseLanguage,
+  }) async =>
+      _flowState(clarify);
+
+  @override
+  Future<ClarifyingFinancialDraft> answerClarification({
+    required String draftId,
+    required int expectedVersion,
+    required String questionId,
+    String? optionKey,
+    String? freeText,
+  }) async =>
+      _flowState(false);
+
+  @override
+  Future<FinancialDraftConfirmation> confirmDraft({
+    required String draftId,
+    required int expectedVersion,
+  }) async =>
+      FinancialDraftConfirmation(
+          draft: FinancialDraft.fromJson({
+            ..._flowDraft(),
+            'status': 'confirmed',
+            'version': 2,
+          }),
+          transactionIds: const []);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+ClarifyingFinancialDraft _flowState(bool clarify) =>
+    ClarifyingFinancialDraft.fromJson({
+      'clarification_state': clarify ? 'awaiting_required' : 'ready_for_review',
+      'draft': _flowDraft(),
+      'clarifications': clarify
+          ? [
+              {
+                'id': 'question-1',
+                'sequence': 1,
+                'round_number': 1,
+                'requirement': 'required',
+                'status': 'open',
+                'question': 'Did you buy them?',
+                'reason': 'This changes your expense.',
+                'options': [
+                  {'option_key': 'not_bought', 'label': 'I did not buy them'}
+                ],
+                'answer': null,
+              }
+            ]
+          : [],
+    });
+
+Map<String, dynamic> _flowDraft() => {
+      'id': 'draft-1',
+      'status': 'draft',
+      'version': 1,
+      'summary': 'No purchase was made.',
+      'confirmation_questions': [],
+      'events': [
+        {
+          'id': 'event-1',
+          'position': 0,
+          'disposition': 'exclude',
+          'event': {
+            'title': 'Shoes',
+            'category': 'shopping',
+            'transaction_type': 'expense',
+            'event_date': null,
+            'merchant': null,
+            'payer_type': 'user',
+            'paid_by_name': null,
+            'settlement_status': 'not_applicable',
+            'user_net_amount': '0',
+            'currency': 'CAD',
+            'amount_mentions': [],
+            'quantities': [],
+            'source_text': 'I decided not to buy the shoes',
+            'confidence': 1.0,
+            'needs_confirmation': false,
+          },
+        }
+      ],
+      'totals_by_currency': {},
+    };
 
 class _FakeVoiceInput implements VoiceInput {
   String? localeId;
