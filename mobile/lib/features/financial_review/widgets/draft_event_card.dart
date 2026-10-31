@@ -7,11 +7,15 @@ class DraftEventCard extends StatelessWidget {
   const DraftEventCard(
       {required this.draftEvent,
       required this.onEdit,
+      this.onDateTap,
+      this.isBusy = false,
       this.responseLanguage = 'en',
       super.key});
 
   final FinancialDraftEvent draftEvent;
   final VoidCallback onEdit;
+  final VoidCallback? onDateTap;
+  final bool isBusy;
   final String responseLanguage;
 
   String _t(String zh, String en, String fr) => switch (responseLanguage) {
@@ -70,7 +74,7 @@ class DraftEventCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
       ),
       child: InkWell(
-        onTap: onEdit,
+        onTap: isBusy ? null : onEdit,
         borderRadius: BorderRadius.circular(18),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -127,10 +131,30 @@ class DraftEventCard extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                   ),
                   if (savedDate != null && savedDate.isNotEmpty)
-                    Chip(
+                    if (onDateTap == null)
+                      Chip(
+                        avatar:
+                            const Icon(Icons.calendar_today_outlined, size: 16),
+                        label: Text('${_t('日期', 'Date', 'Date')}: $savedDate'),
+                        visualDensity: VisualDensity.compact,
+                      )
+                    else
+                      ActionChip(
+                        key: ValueKey('eventDate-${draftEvent.id}'),
+                        avatar:
+                            const Icon(Icons.calendar_today_outlined, size: 16),
+                        label: Text('${_t('日期', 'Date', 'Date')}: $savedDate'),
+                        onPressed: isBusy ? null : onDateTap,
+                        visualDensity: VisualDensity.compact,
+                      )
+                  else if (onDateTap != null)
+                    ActionChip(
+                      key: ValueKey('eventDate-${draftEvent.id}'),
                       avatar:
-                          const Icon(Icons.calendar_today_outlined, size: 16),
-                      label: Text('${_t('日期', 'Date', 'Date')}: $savedDate'),
+                          const Icon(Icons.calendar_month_outlined, size: 16),
+                      label:
+                          Text(_t('选择日期', 'Choose date', 'Choisir une date')),
+                      onPressed: isBusy ? null : onDateTap,
                       visualDensity: VisualDensity.compact,
                     ),
                   Chip(
@@ -148,6 +172,10 @@ class DraftEventCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: Colors.grey.shade700),
               ),
+              if (isBusy) ...[
+                const SizedBox(height: 10),
+                const LinearProgressIndicator(),
+              ],
             ],
           ),
         ),

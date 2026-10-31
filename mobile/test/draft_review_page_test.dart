@@ -18,6 +18,31 @@ void main() {
     expect(find.text('dining'), findsNothing);
   });
 
+  for (final (language, gesture) in [
+    ('zh', '← 左滑记录'),
+    ('en', '← Swipe left to record'),
+    ('fr', '← Glisser à gauche pour enregistrer'),
+  ]) {
+    testWidgets('draft swipe guidance uses $language on a narrow phone',
+        (tester) async {
+      tester.view.physicalSize = const Size(320, 700);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(MaterialApp(
+        home: DraftReviewPage(
+          api: _UnusedApi(),
+          initialDraft: _draft(),
+          responseLanguage: language,
+        ),
+      ));
+
+      expect(find.text(gesture), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('pending events block confirmation and show review state',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
@@ -29,6 +54,86 @@ void main() {
     final button = tester
         .widget<FilledButton>(find.byKey(const Key('confirmDraftButton')));
     expect(button.onPressed, isNull);
+  });
+
+  testWidgets('draft cards handle include and exclude swipes directly',
+      (tester) async {
+    final api = _ReviewApi(_twoPendingDraft());
+    await tester.pumpWidget(MaterialApp(
+      home: DraftReviewPage(api: api, initialDraft: api.draft),
+    ));
+
+    expect(find.byKey(const Key('quickReviewButton')), findsNothing);
+    expect(find.byKey(const Key('draftSwipeGuidance')), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const ValueKey('draftSwipe-dinner')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(api.decisions.first.$2, DraftEventDisposition.include);
+    expect(find.text('Will be recorded'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('draftSwipe-coffee')),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(
+      find.byKey(const ValueKey('draftSwipe-coffee')),
+      const Offset(500, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(api.decisions, [
+      ('dinner', DraftEventDisposition.include, 1),
+      ('coffee', DraftEventDisposition.exclude, 2),
+    ]);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('confirmDraftButton')))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('draft date chip opens calendar and saves the selected date',
+      (tester) async {
+    final api = _ReviewApi(_undatedPendingDraft());
+    await tester.pumpWidget(MaterialApp(
+      home: DraftReviewPage(api: api, initialDraft: api.draft),
+    ));
+
+    await tester.tap(find.byKey(const ValueKey('eventDate-undated-event')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+
+    final now = DateTime.now();
+    await tester.tap(find.text('1').last);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    final expectedDate = '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-01';
+    expect(find.text('Date: $expectedDate'), findsOneWidget);
+    expect(api.decisions.single.$2, DraftEventDisposition.pending);
+  });
+
+  testWidgets('left swipe with no date opens calendar before recording',
+      (tester) async {
+    final api = _ReviewApi(_undatedPendingDraft());
+    await tester.pumpWidget(MaterialApp(
+      home: DraftReviewPage(api: api, initialDraft: api.draft),
+    ));
+
+    await tester.drag(
+      find.byKey(const ValueKey('draftSwipe-undated-event')),
+      const Offset(-500, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    expect(api.decisions, isEmpty);
   });
 
   testWidgets('avoided purchase card does not claim the user paid',
@@ -43,6 +148,10 @@ void main() {
     expect(find.text('Not purchased'), findsOneWidget);
     expect(find.text('You paid'), findsNothing);
     expect(find.text('Review needed'), findsOneWidget);
+    final swipe = tester.widget<Dismissible>(
+      find.byKey(const ValueKey('draftSwipe-avoided-event')),
+    );
+    expect(swipe.direction, DismissDirection.startToEnd);
   });
 
   testWidgets('uses recording language for included and excluded status chips',
@@ -186,6 +295,61 @@ FinancialDraft _draft() => FinancialDraft.fromJson({
       ],
       'totals_by_currency': {},
     });
+
+FinancialDraft _twoPendingDraft() => FinancialDraft.fromJson({
+      'id': 'swipe-draft',
+      'status': 'draft',
+      'version': 1,
+      'summary': 'Two events',
+      'confirmation_questions': [],
+      'events': [
+        _pendingEvent('dinner', 0, 'Dinner', '80.00', '2026-08-08'),
+        _pendingEvent('coffee', 1, 'Coffee', '5.00', '2026-08-08'),
+      ],
+      'totals_by_currency': {},
+    });
+
+FinancialDraft _undatedPendingDraft() => FinancialDraft.fromJson({
+      'id': 'undated-pending-draft',
+      'status': 'draft',
+      'version': 1,
+      'summary': 'One event needs a date',
+      'confirmation_questions': [],
+      'events': [
+        _pendingEvent('undated-event', 0, 'Dinner', '18.00', null),
+      ],
+      'totals_by_currency': {},
+    });
+
+Map<String, dynamic> _pendingEvent(
+  String id,
+  int position,
+  String title,
+  String amount,
+  String? eventDate,
+) =>
+    {
+      'id': id,
+      'position': position,
+      'disposition': 'pending',
+      'event': {
+        'title': title,
+        'category': 'dining',
+        'transaction_type': 'expense',
+        'event_date': eventDate,
+        'merchant': 'Cafe',
+        'payer_type': 'user',
+        'paid_by_name': null,
+        'settlement_status': 'not_applicable',
+        'user_net_amount': amount,
+        'currency': 'CAD',
+        'amount_mentions': [],
+        'quantities': [],
+        'source_text': '$title was $amount CAD',
+        'confidence': 1.0,
+        'needs_confirmation': false,
+      },
+    };
 
 FinancialDraft _avoidedDraft() => FinancialDraft.fromJson({
       'id': 'avoided-draft',
@@ -374,6 +538,58 @@ Map<String, dynamic> _reviewedEvent(
     };
 
 class _UnusedApi implements FinPilotApi {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _ReviewApi implements FinPilotApi {
+  _ReviewApi(this.draft);
+
+  FinancialDraft draft;
+  final decisions = <(String, DraftEventDisposition, int)>[];
+
+  @override
+  Future<FinancialDraft> updateDraftEvent({
+    required String draftId,
+    required String eventId,
+    required int expectedVersion,
+    required DraftEventDisposition disposition,
+    required SpendingEvent event,
+  }) async {
+    decisions.add((eventId, disposition, expectedVersion));
+    final events = draft.events
+        .map((item) => {
+              'id': item.id,
+              'position': item.position,
+              'disposition':
+                  item.id == eventId ? disposition.name : item.disposition.name,
+              'event':
+                  item.id == eventId ? event.toJson() : item.event.toJson(),
+            })
+        .toList();
+    final totals = <String, String>{};
+    for (final item in events) {
+      if (item['disposition'] == 'include') {
+        final included = item['event']! as Map<String, dynamic>;
+        totals[included['currency']! as String] =
+            included['user_net_amount']!.toString();
+      }
+    }
+    draft = FinancialDraft.fromJson({
+      'id': draft.id,
+      'status': 'draft',
+      'version': draft.version + 1,
+      'summary': draft.summary,
+      'confirmation_questions': draft.confirmationQuestions,
+      'events': events,
+      'totals_by_currency': totals,
+    });
+    return draft;
+  }
+
+  @override
+  Future<FinancialDraft> getDraft(String draftId) async => draft;
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

@@ -4,7 +4,6 @@ import '../../core/api_client.dart';
 import '../../core/finpilot_theme.dart';
 import 'event_edit_page.dart';
 import 'models/financial_review_models.dart';
-import 'quick_review_page.dart';
 import 'widgets/draft_event_card.dart';
 
 enum PostConfirmationChoice { addMore, home }
@@ -28,6 +27,7 @@ class DraftReviewPage extends StatefulWidget {
 class _DraftReviewPageState extends State<DraftReviewPage> {
   late FinancialDraft _draft;
   bool _confirming = false;
+  String? _updatingEventId;
   FinancialDraftConfirmation? _confirmation;
   String? _error;
 
@@ -67,10 +67,13 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
       _draft.events.isNotEmpty &&
       _pendingCount == 0 &&
       _missingIncludedDateCount == 0 &&
+      _updatingEventId == null &&
       !_confirming;
 
+  bool get _busy => _confirming || _updatingEventId != null;
+
   Future<void> _edit(FinancialDraftEvent event) async {
-    if (_confirming || _draft.status != DraftStatus.draft) return;
+    if (_busy || _draft.status != DraftStatus.draft) return;
     final updated =
         await Navigator.of(context).push<FinancialDraft>(MaterialPageRoute(
       builder: (_) => EventEditPage(
@@ -83,24 +86,155 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
     if (updated != null && mounted) setState(() => _draft = updated);
   }
 
-  Future<void> _quickReview() async {
-    if (_confirming ||
-        _draft.status != DraftStatus.draft ||
-        _pendingCount == 0) {
-      return;
+  bool _canRecord(SpendingEvent event) {
+    final date = event.eventDate?.trim();
+    final userBearsCost = event.payerType == 'user' ||
+        event.payerType == 'shared' ||
+        event.settlementStatus == 'repaid_by_user';
+    return !event.isAvoidedPurchase &&
+        event.transactionType == 'expense' &&
+        !event.needsConfirmation &&
+        userBearsCost &&
+        (num.tryParse(event.userNetAmount) ?? 0) > 0 &&
+        date != null &&
+        date.isNotEmpty;
+  }
+
+  String _recordingBlocker(SpendingEvent event) {
+    if (event.needsConfirmation) {
+      return _t(
+        '这笔事件仍有未解决的信息，暂时不能记录。',
+        'This event still has unresolved information and cannot be recorded yet.',
+        'Cet événement contient encore des informations non résolues et ne peut pas encore être enregistré.',
+      );
     }
-    final updated =
-        await Navigator.of(context).push<FinancialDraft>(MaterialPageRoute(
-      builder: (_) => QuickReviewPage(
-        api: widget.api,
-        initialDraft: _draft,
-        responseLanguage: widget.responseLanguage,
-        onDraftUpdated: (draft) {
-          if (mounted) setState(() => _draft = draft);
-        },
-      ),
-    ));
-    if (updated != null && mounted) setState(() => _draft = updated);
+    if (event.transactionType != 'expense') {
+      return _t(
+        '当前账本只记录支出，这项内容暂时不能记录。',
+        'This ledger currently records expenses only, so this item cannot be recorded.',
+        'Ce registre enregistre actuellement uniquement les dépenses; cet élément ne peut donc pas être enregistré.',
+      );
+    }
+    if (event.payerType != 'user' &&
+        event.payerType != 'shared' &&
+        event.settlementStatus != 'repaid_by_user') {
+      return _t(
+        '付款责任不明确或由他人承担，不能计入你的支出。',
+        'Payment responsibility is unclear or belongs to someone else, so it cannot count as your expense.',
+        'La responsabilité du paiement est incertaine ou revient à une autre personne; cette dépense ne peut donc pas être comptée comme la vôtre.',
+      );
+    }
+    if ((num.tryParse(event.userNetAmount) ?? 0) <= 0) {
+      return _t(
+        '需要先核对你实际承担的金额。',
+        'Review the amount you actually paid before recording.',
+        'Vérifiez le montant que vous avez réellement payé avant de l’enregistrer.',
+      );
+    }
+    return _t(
+      '记录支出前需要选择准确日期。',
+      'Choose an exact date before recording this expense.',
+      'Choisissez une date exacte avant d’enregistrer cette dépense.',
+    );
+  }
+
+  Future<void> _saveEvent(
+    FinancialDraftEvent draftEvent,
+    SpendingEvent event,
+    DraftEventDisposition disposition,
+  ) async {
+    if (_busy || _draft.status != DraftStatus.draft) return;
+    setState(() {
+      _updatingEventId = draftEvent.id;
+      _error = null;
+    });
+    try {
+      final updated = await widget.api.updateDraftEvent(
+        draftId: _draft.id,
+        eventId: draftEvent.id,
+        expectedVersion: _draft.version,
+        disposition: disposition,
+        event: event,
+      );
+      if (mounted) setState(() => _draft = updated);
+    } on ApiException catch (error) {
+      if (error.statusCode == 409) {
+        try {
+          final latest = await widget.api.getDraft(_draft.id);
+          if (mounted) setState(() => _draft = latest);
+        } catch (_) {
+          // Keep the current review visible if refreshing also fails.
+        }
+      }
+      if (mounted) {
+        setState(() => _error = widget.responseLanguage == 'en'
+            ? error.message
+            : _t(
+                '无法保存这项决定，请重试。',
+                error.message,
+                'Impossible d’enregistrer cette décision. Réessayez.',
+              ));
+      }
+    } finally {
+      if (mounted) setState(() => _updatingEventId = null);
+    }
+  }
+
+  Future<void> _selectDate(FinancialDraftEvent draftEvent) async {
+    if (_busy || _draft.status != DraftStatus.draft) return;
+    final parsed = DateTime.tryParse(draftEvent.event.eventDate ?? '');
+    final selected = await showDatePicker(
+      context: context,
+      locale: Locale(widget.responseLanguage),
+      initialDate: parsed ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+    );
+    if (selected == null || !mounted) return;
+    final date = '${selected.year.toString().padLeft(4, '0')}-'
+        '${selected.month.toString().padLeft(2, '0')}-'
+        '${selected.day.toString().padLeft(2, '0')}';
+    await _saveEvent(
+      draftEvent,
+      draftEvent.event.withEventDate(date),
+      draftEvent.disposition,
+    );
+  }
+
+  Future<bool> _handleSwipe(
+    FinancialDraftEvent draftEvent,
+    DismissDirection direction,
+  ) async {
+    if (_busy || _draft.status != DraftStatus.draft) return false;
+    if (direction == DismissDirection.startToEnd) {
+      await _saveEvent(
+        draftEvent,
+        draftEvent.event,
+        DraftEventDisposition.exclude,
+      );
+      return false;
+    }
+    final event = draftEvent.event;
+    if (event.isAvoidedPurchase) return false;
+    final date = event.eventDate?.trim();
+    if (date == null || date.isEmpty) {
+      await _selectDate(draftEvent);
+      return false;
+    }
+    if (!_canRecord(event)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_recordingBlocker(event))),
+        );
+      }
+      return false;
+    }
+    await _saveEvent(
+      draftEvent,
+      event,
+      DraftEventDisposition.include,
+    );
+    return false;
   }
 
   Future<void> _confirm() async {
@@ -145,7 +279,7 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
   }
 
   Future<void> _cancel() async {
-    if (_confirming || _draft.status != DraftStatus.draft) return;
+    if (_busy || _draft.status != DraftStatus.draft) return;
     setState(() => _confirming = true);
     try {
       await widget.api
@@ -174,6 +308,42 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
     }
   }
 
+  Widget _buildSwipeCard(FinancialDraftEvent draftEvent) {
+    final event = draftEvent.event;
+    final canChooseDate = !event.isAvoidedPurchase &&
+        draftEvent.disposition != DraftEventDisposition.exclude;
+    final card = DraftEventCard(
+      draftEvent: draftEvent,
+      responseLanguage: widget.responseLanguage,
+      isBusy: _updatingEventId == draftEvent.id,
+      onDateTap: canChooseDate ? () => _selectDate(draftEvent) : null,
+      onEdit: () => _edit(draftEvent),
+    );
+    if (_draft.status != DraftStatus.draft) return card;
+    return Dismissible(
+      key: ValueKey('draftSwipe-${draftEvent.id}'),
+      direction: _busy
+          ? DismissDirection.none
+          : event.isAvoidedPurchase
+              ? DismissDirection.startToEnd
+              : DismissDirection.horizontal,
+      confirmDismiss: (direction) => _handleSwipe(draftEvent, direction),
+      background: _DraftSwipeBackground(
+        alignment: Alignment.centerLeft,
+        color: Colors.orange.shade700,
+        icon: Icons.arrow_forward,
+        label: _t('排除', 'Exclude', 'Exclure'),
+      ),
+      secondaryBackground: _DraftSwipeBackground(
+        alignment: Alignment.centerRight,
+        color: Colors.green.shade700,
+        icon: Icons.arrow_back,
+        label: _t('记录', 'Include', 'Inclure'),
+      ),
+      child: card,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_confirmation != null) return _success(context);
@@ -183,9 +353,8 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
             Text(_t('核对草稿', 'Review your draft', 'Vérifier votre brouillon')),
         actions: [
           TextButton(
-            onPressed: _confirming || _draft.status != DraftStatus.draft
-                ? null
-                : _cancel,
+            onPressed:
+                _busy || _draft.status != DraftStatus.draft ? null : _cancel,
             child: Text(_t('取消草稿', 'Cancel draft', 'Annuler le brouillon')),
           ),
         ],
@@ -230,6 +399,39 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
                   style: const TextStyle(
                       fontSize: 18, fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
+              if (_draft.events.isNotEmpty &&
+                  _draft.status == DraftStatus.draft) ...[
+                Container(
+                  key: const Key('draftSwipeGuidance'),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: FinPilotColors.mint.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Wrap(
+                    spacing: 16,
+                    runSpacing: 6,
+                    alignment: WrapAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _t('← 左滑记录', '← Swipe left to record',
+                            '← Glisser à gauche pour enregistrer'),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        _t('右滑排除 →', 'Swipe right to exclude →',
+                            'Glisser à droite pour exclure →'),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        _t('点击日期可打开日历', 'Tap the date to open the calendar',
+                            'Touchez la date pour ouvrir le calendrier'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               if (_draft.totalsByCurrency.isNotEmpty) ...[
                 Text(_t('计入的总额', 'Included totals', 'Totaux inclus'),
                     style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -272,12 +474,7 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
                   ),
                 )
               else
-                ..._draft.events.map((event) => DraftEventCard(
-                      key: ValueKey(event.id),
-                      draftEvent: event,
-                      responseLanguage: widget.responseLanguage,
-                      onEdit: () => _edit(event),
-                    )),
+                ..._draft.events.map(_buildSwipeCard),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
@@ -304,23 +501,6 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
                         '还有 $_pendingCount 笔事件需要核对',
                         '$_pendingCount event${_pendingCount == 1 ? '' : 's'} still need review',
                         '$_pendingCount événement(s) restent à vérifier')),
-                  if (_pendingCount > 0) ...[
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.tonalIcon(
-                        key: const Key('quickReviewButton'),
-                        onPressed: _confirming ? null : _quickReview,
-                        icon: const Icon(
-                            Icons.playlist_add_check_circle_outlined),
-                        label: Text(_t(
-                          '逐条快速核对',
-                          'Quick review one by one',
-                          'Vérifier rapidement un par un',
-                        )),
-                      ),
-                    ),
-                  ],
                   if (_missingIncludedDateCount > 0)
                     Text(
                       _t(
@@ -404,6 +584,45 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
               ],
             ),
           ),
+        ),
+      );
+}
+
+class _DraftSwipeBackground extends StatelessWidget {
+  const _DraftSwipeBackground({
+    required this.alignment,
+    required this.color,
+    required this.icon,
+    required this.label,
+  });
+
+  final Alignment alignment;
+  final Color color;
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        alignment: alignment,
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
         ),
       );
 }
