@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/finpilot_theme.dart';
 import 'features/home/home_page.dart';
@@ -16,6 +17,12 @@ class FinPilotApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'FinPilot Assistant',
       theme: finPilotTheme(),
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      supportedLocales: const [
+        Locale('zh'),
+        Locale('en'),
+        Locale('fr'),
+      ],
       home: const HomePage(),
     );
   }

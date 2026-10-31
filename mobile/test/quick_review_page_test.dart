@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('quick review records decisions one event at a time',
+  testWidgets('quick review records swipe decisions one event at a time',
       (tester) async {
     final api = _QuickReviewApi(_draft());
     await tester.pumpWidget(MaterialApp(
@@ -18,17 +18,18 @@ void main() {
     expect(find.text('Dinner'), findsOneWidget);
     expect(find.text('CAD 80.00'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('quickReviewInclude')));
+    await tester.drag(
+      find.byKey(const Key('quickReviewSwipeCard')),
+      const Offset(-500, 0),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Item 2 of 2'), findsOneWidget);
     expect(find.text('Coffee'), findsOneWidget);
 
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('quickReviewExclude')),
-      300,
-      scrollable: find.byType(Scrollable).last,
+    await tester.drag(
+      find.byKey(const Key('quickReviewSwipeCard')),
+      const Offset(500, 0),
     );
-    await tester.tap(find.byKey(const Key('quickReviewExclude')));
     await tester.pumpAndSettle();
 
     expect(api.decisions, [
@@ -41,7 +42,7 @@ void main() {
     expect(confirm.onPressed, isNotNull);
   });
 
-  testWidgets('quick review requires details before recording incomplete event',
+  testWidgets('calendar saves a missing date without manual edit',
       (tester) async {
     final api = _QuickReviewApi(_draft(missingDate: true, eventCount: 1));
     await tester.pumpWidget(MaterialApp(
@@ -54,17 +55,41 @@ void main() {
     expect(find.text('Add an exact date before recording this expense.'),
         findsOneWidget);
     await tester.scrollUntilVisible(
-      find.byKey(const Key('quickReviewInclude')),
-      300,
+      find.byKey(const Key('quickReviewDatePicker')),
+      250,
       scrollable: find.byType(Scrollable).last,
     );
-    expect(
-      tester
-          .widget<FilledButton>(find.byKey(const Key('quickReviewInclude')))
-          .onPressed,
-      isNull,
+    await tester.tap(find.byKey(const Key('quickReviewDatePicker')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    expect(find.byKey(const Key('quickReviewEdit')), findsNothing);
+    final now = DateTime.now();
+    await tester.tap(find.text('1').last);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    final expectedDate = '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-01';
+    expect(find.text(expectedDate), findsOneWidget);
+    expect(api.decisions.single.$2, DraftEventDisposition.pending);
+  });
+
+  testWidgets('left swipe on a missing date opens the calendar',
+      (tester) async {
+    final api = _QuickReviewApi(_draft(missingDate: true, eventCount: 1));
+    await tester.pumpWidget(MaterialApp(
+      home: DraftReviewPage(api: api, initialDraft: api.draft),
+    ));
+    await tester.tap(find.byKey(const Key('quickReviewButton')));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const Key('quickReviewSwipeCard')),
+      const Offset(-500, 0),
     );
-    expect(find.byKey(const Key('quickReviewEdit')), findsOneWidget);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DatePickerDialog), findsOneWidget);
     expect(api.decisions, isEmpty);
   });
 
@@ -104,10 +129,10 @@ void main() {
     expect(find.text('Nothing will be recorded'), findsOneWidget);
   });
 
-  for (final (language, title, action) in [
-    ('zh', '快速核对', '记录这笔支出'),
-    ('en', 'Quick review', 'Record this expense'),
-    ('fr', 'Vérification rapide', 'Enregistrer cette dépense'),
+  for (final (language, title, gesture) in [
+    ('zh', '快速核对', '← 左滑记录'),
+    ('en', 'Quick review', '← Swipe left to record'),
+    ('fr', 'Vérification rapide', '← Glisser à gauche pour enregistrer'),
   ]) {
     testWidgets('quick review controls use $language', (tester) async {
       final api = _QuickReviewApi(_draft(eventCount: 1));
@@ -122,12 +147,7 @@ void main() {
       await tester.tap(find.byKey(const Key('quickReviewButton')));
       await tester.pumpAndSettle();
       expect(find.text(title), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text(action),
-        300,
-        scrollable: find.byType(Scrollable).last,
-      );
-      expect(find.text(action), findsOneWidget);
+      expect(find.text(gesture), findsOneWidget);
     });
   }
 }
@@ -253,7 +273,8 @@ class _QuickReviewApi implements FinPilotApi {
               'position': item.position,
               'disposition':
                   item.id == eventId ? disposition.name : item.disposition.name,
-              'event': item.event.toJson(),
+              'event':
+                  item.id == eventId ? event.toJson() : item.event.toJson(),
             })
         .toList();
     final totals = <String, String>{};

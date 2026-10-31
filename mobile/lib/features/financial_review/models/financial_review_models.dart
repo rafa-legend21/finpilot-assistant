@@ -128,6 +128,24 @@ class SpendingEvent {
       amountMentions.any((mention) => mention.role == 'saved_decision') &&
       amountMentions.every((mention) => !mention.countedInUserTotal);
 
+  SpendingEvent withEventDate(String eventDate) => SpendingEvent(
+        title: title,
+        category: category,
+        transactionType: transactionType,
+        eventDate: eventDate,
+        merchant: merchant,
+        payerType: payerType,
+        paidByName: paidByName,
+        settlementStatus: settlementStatus,
+        userNetAmount: userNetAmount,
+        currency: currency,
+        amountMentions: amountMentions,
+        quantities: quantities,
+        sourceText: sourceText,
+        confidence: confidence,
+        needsConfirmation: needsConfirmation,
+      );
+
   SpendingEvent edited({
     required String amount,
     required String category,
