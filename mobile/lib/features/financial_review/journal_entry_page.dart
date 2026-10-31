@@ -143,8 +143,8 @@ class _JournalEntryPageState extends State<JournalEntryPage> {
       );
       if (!mounted) return;
       var didConfirm = false;
-      final confirmed =
-          await Navigator.of(context).push<bool>(MaterialPageRoute(
+      final choice = await Navigator.of(context)
+          .push<PostConfirmationChoice>(MaterialPageRoute(
         builder: (_) => result.clarificationState == 'awaiting_required'
             ? ClarificationPage(
                 api: widget.api,
@@ -160,9 +160,13 @@ class _JournalEntryPageState extends State<JournalEntryPage> {
                 onConfirmed: () => didConfirm = true,
               ),
       ));
-      if ((confirmed == true || didConfirm) && mounted) {
+      if ((choice != null || didConfirm) && mounted) {
         _controller.clear();
         _voiceBaseText = '';
+        if (choice == PostConfirmationChoice.home &&
+            Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
       }
     } on ApiException catch (error) {
       if (mounted) {

@@ -111,7 +111,8 @@ class _ClarificationPageState extends State<ClarificationPage> {
   }
 
   Future<void> _reviewDraft() async {
-    final confirmed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+    final choice = await Navigator.of(context)
+        .push<PostConfirmationChoice>(MaterialPageRoute(
       builder: (_) => DraftReviewPage(
         api: widget.api,
         initialDraft: _state.draft,
@@ -119,7 +120,7 @@ class _ClarificationPageState extends State<ClarificationPage> {
         onConfirmed: widget.onConfirmed,
       ),
     ));
-    if (mounted) Navigator.of(context).pop(confirmed == true);
+    if (mounted) Navigator.of(context).pop(choice);
   }
 
   @override

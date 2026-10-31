@@ -6,6 +6,8 @@ import 'event_edit_page.dart';
 import 'models/financial_review_models.dart';
 import 'widgets/draft_event_card.dart';
 
+enum PostConfirmationChoice { addMore, home }
+
 class DraftReviewPage extends StatefulWidget {
   const DraftReviewPage(
       {required this.api,
@@ -337,9 +339,29 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
                     '${_confirmation!.transactionIds.length} transaction(s) saved',
                     '${_confirmation!.transactionIds.length} transaction(s) enregistrée(s)')),
                 const SizedBox(height: 20),
+                Text(
+                  _t('还有什么需要添加的吗？', 'Anything else to add?',
+                      'Avez-vous autre chose à ajouter ?'),
+                  key: const Key('addMorePrompt'),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 16),
                 FilledButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: Text(_t('完成', 'Done', 'Terminé')),
+                  key: const Key('addMoreYes'),
+                  onPressed: () =>
+                      Navigator.of(context).pop(PostConfirmationChoice.addMore),
+                  child: Text(_t(
+                      '有，继续添加', 'Yes, add more', 'Oui, ajouter autre chose')),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  key: const Key('addMoreNo'),
+                  onPressed: () =>
+                      Navigator.of(context).pop(PostConfirmationChoice.home),
+                  child: Text(_t(
+                      '没有了，回到首页', 'No, go home', 'Non, revenir à l’accueil')),
                 ),
               ],
             ),

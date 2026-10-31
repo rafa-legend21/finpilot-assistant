@@ -2,6 +2,8 @@ import 'package:finpilot_assistant/core/api_client.dart';
 import 'package:finpilot_assistant/core/voice_input.dart';
 import 'package:finpilot_assistant/features/financial_review/journal_entry_page.dart';
 import 'package:finpilot_assistant/features/financial_review/models/financial_review_models.dart';
+import 'package:finpilot_assistant/features/home/home_page.dart';
+import 'package:finpilot_assistant/features/transactions/transaction_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -35,7 +37,8 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('confirmDraftButton')));
     await tester.tap(find.byKey(const Key('confirmDraftButton')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Done'));
+    expect(find.text('Anything else to add?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('addMoreYes')));
     await tester.pumpAndSettle();
 
     expect(_journalText(tester), isEmpty);
@@ -82,11 +85,58 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('confirmDraftButton')));
     await tester.tap(find.byKey(const Key('confirmDraftButton')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Done'));
+    await tester.tap(find.byKey(const Key('addMoreYes')));
     await tester.pumpAndSettle();
 
     expect(_journalText(tester), isEmpty);
   });
+
+  testWidgets('no more to add returns to Home after confirmation',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(home: HomePage(api: _FlowApi())));
+    await tester.tap(find.text('Tell your story'));
+    await tester.pumpAndSettle();
+    await _submitJournal(tester);
+    await tester.ensureVisible(find.byKey(const Key('confirmDraftButton')));
+    await tester.tap(find.byKey(const Key('confirmDraftButton')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('addMoreNo')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Your money, in your hands'), findsOneWidget);
+    expect(find.byKey(const Key('journalField')), findsNothing);
+  });
+
+  for (final (label, question, yes, no) in [
+    ('中文', '还有什么需要添加的吗？', '有，继续添加', '没有了，回到首页'),
+    ('English', 'Anything else to add?', 'Yes, add more', 'No, go home'),
+    (
+      'Français',
+      'Avez-vous autre chose à ajouter ?',
+      'Oui, ajouter autre chose',
+      'Non, revenir à l’accueil'
+    ),
+  ]) {
+    testWidgets('$label confirmation follow-up uses the selected language',
+        (tester) async {
+      await tester
+          .pumpWidget(MaterialApp(home: JournalEntryPage(api: _FlowApi())));
+      if (label != 'English') {
+        await tester.tap(find.byKey(const Key('voiceLanguage')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(label).last);
+        await tester.pumpAndSettle();
+      }
+      await _submitJournal(tester);
+      await tester.ensureVisible(find.byKey(const Key('confirmDraftButton')));
+      await tester.tap(find.byKey(const Key('confirmDraftButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text(question), findsOneWidget);
+      expect(find.text(yes), findsOneWidget);
+      expect(find.text(no), findsOneWidget);
+    });
+  }
 
   testWidgets('journal text survives a recoverable API error', (tester) async {
     await tester
@@ -247,6 +297,10 @@ class _FlowApi implements FinPilotApi {
   _FlowApi({this.clarify = false});
 
   final bool clarify;
+
+  @override
+  Future<RecordedExpenseSummary> getTransactionSummary() async =>
+      const RecordedExpenseSummary({});
 
   @override
   Future<ClarifyingFinancialDraft> createDraftFromJournal({
