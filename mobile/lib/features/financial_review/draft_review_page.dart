@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/finpilot_theme.dart';
 import 'event_edit_page.dart';
 import 'models/financial_review_models.dart';
+import 'quick_review_page.dart';
 import 'widgets/draft_event_card.dart';
 
 enum PostConfirmationChoice { addMore, home }
@@ -77,6 +78,26 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
         draft: _draft,
         draftEvent: event,
         responseLanguage: widget.responseLanguage,
+      ),
+    ));
+    if (updated != null && mounted) setState(() => _draft = updated);
+  }
+
+  Future<void> _quickReview() async {
+    if (_confirming ||
+        _draft.status != DraftStatus.draft ||
+        _pendingCount == 0) {
+      return;
+    }
+    final updated =
+        await Navigator.of(context).push<FinancialDraft>(MaterialPageRoute(
+      builder: (_) => QuickReviewPage(
+        api: widget.api,
+        initialDraft: _draft,
+        responseLanguage: widget.responseLanguage,
+        onDraftUpdated: (draft) {
+          if (mounted) setState(() => _draft = draft);
+        },
       ),
     ));
     if (updated != null && mounted) setState(() => _draft = updated);
@@ -283,6 +304,23 @@ class _DraftReviewPageState extends State<DraftReviewPage> {
                         '还有 $_pendingCount 笔事件需要核对',
                         '$_pendingCount event${_pendingCount == 1 ? '' : 's'} still need review',
                         '$_pendingCount événement(s) restent à vérifier')),
+                  if (_pendingCount > 0) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        key: const Key('quickReviewButton'),
+                        onPressed: _confirming ? null : _quickReview,
+                        icon: const Icon(
+                            Icons.playlist_add_check_circle_outlined),
+                        label: Text(_t(
+                          '逐条快速核对',
+                          'Quick review one by one',
+                          'Vérifier rapidement un par un',
+                        )),
+                      ),
+                    ),
+                  ],
                   if (_missingIncludedDateCount > 0)
                     Text(
                       _t(

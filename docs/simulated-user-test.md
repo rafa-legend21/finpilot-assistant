@@ -30,6 +30,8 @@ Open `http://localhost:8080` if Edge does not open automatically. In the app, ch
 
 After a confirmed expense, return to Home and open **Transactions**. The page shows only recorded expenses, their dates and merchants, and separate totals for each currency. Unconfirmed drafts and avoided purchases should not appear there. Tap a record to correct a detail with a reason, review its change history, or remove it from spending if someone else paid. Check that Home and Transactions totals update. This local test database keeps its records across runs until you deliberately remove it. The startup script adds correction columns to older simulated SQLite databases without deleting their records.
 
+When a draft contains pending events, choose **Quick review one by one** to check one event at a time. Confirm its amount, payment responsibility, date, category, and merchant before choosing whether to record it. FinPilot requires the detailed editor when information needed for an accurate expense is incomplete. An avoided purchase can only be confirmed as not purchased. Closing quick review preserves decisions already saved.
+
 After confirming a draft, FinPilot asks in the selected input language whether you have anything else to add. **Yes** returns to Assistant with an empty input field; **No** returns to Home and refreshes the spending overview.
 
 ## iPhone Safari preview from Windows
