@@ -39,13 +39,15 @@ cd backend
 ..\.venv\Scripts\python.exe scripts\run_simulated_test.py --database-name finpilot-v2.db
 ```
 
-Build the web app using your computer's current LAN address, then serve the web app and API on the same LAN port:
+Build the web app using your computer's current LAN address, then run the Dart preview server on that address. It serves the web app and forwards API requests through the same port, while the Python API stays on `127.0.0.1:8000`. This avoids the Windows firewall rule that blocks inbound connections to Python on a Public Wi-Fi profile.
 
 ```powershell
+$finpilotLanIp = '192.168.0.28' # Replace with your current Wi-Fi IPv4 address.
 cd mobile
-flutter build web --dart-define=API_BASE_URL=http://<LAN-IP>:8080
+flutter build web --dart-define="API_BASE_URL=http://${finpilotLanIp}:8080"
 cd ..
-.\.venv\Scripts\python.exe scripts\serve_iphone_preview.py --host <LAN-IP> --port 8080
+$flutterBin = Split-Path (Get-Command flutter).Source -Parent
+& (Join-Path $flutterBin 'cache\dart-sdk\bin\dartvm.exe') scripts\serve_iphone_preview.dart $finpilotLanIp
 ```
 
 Open `http://<LAN-IP>:8080` on iPhone Safari. Check `http://<LAN-IP>:8080/api/v1/health` if a request fails. Run the API in an environment that can reach the configured model service. Use fictional test stories only: the local preview has no user accounts or authentication. Browser voice recognition on plain HTTP may be unavailable on iPhone; typed stories are the supported test here.
